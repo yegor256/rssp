@@ -5,8 +5,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -518,6 +521,213 @@ func (c *closeErrorBody) Read(p []byte) (n int, err error) {
 		return 0, errors.New("already closed")
 	}
 	return 0, errors.New("read error")
+}
+
+func TestPrintItemToStdout(t *testing.T) {
+	originalOutputFile := outputFile
+	defer func() { outputFile = originalOutputFile }()
+
+	outputFile = os.Stdout
+
+	item := &Item{
+		Title:       "Test Item",
+		Link:        "https://example.com/item",
+		Description: "Test Description",
+		PubDate:     "Mon, 01 Jan 2024 00:00:00 GMT",
+		GUID:        "test-guid",
+	}
+
+	printItem("https://example.com/feed", item)
+}
+
+func TestPrintItemToFile(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "test_output.txt")
+
+	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	originalOutputFile := outputFile
+	defer func() {
+		outputFile = originalOutputFile
+		file.Close()
+	}()
+
+	outputFile = file
+
+	item := &Item{
+		Title:       "Test Item",
+		Link:        "https://example.com/item",
+		Description: "Test Description",
+		PubDate:     "Mon, 01 Jan 2024 00:00:00 GMT",
+		GUID:        "test-guid",
+	}
+
+	printItem("https://example.com/feed", item)
+	file.Close()
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "Test Item") {
+		t.Error("output file should contain item title")
+	}
+	if !strings.Contains(contentStr, "https://example.com/item") {
+		t.Error("output file should contain item link")
+	}
+	if !strings.Contains(contentStr, "Test Description") {
+		t.Error("output file should contain item description")
+	}
+	if !strings.Contains(contentStr, "https://example.com/feed") {
+		t.Error("output file should contain feed URL")
+	}
+}
+
+func TestPrintItemAppendMode(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "test_append.txt")
+
+	err := os.WriteFile(outputPath, []byte("Initial content\n"), 0644)
+	if err != nil {
+		t.Fatalf("failed to create initial file: %v", err)
+	}
+
+	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatalf("failed to open file in append mode: %v", err)
+	}
+
+	originalOutputFile := outputFile
+	defer func() {
+		outputFile = originalOutputFile
+		file.Close()
+	}()
+
+	outputFile = file
+
+	item := &Item{
+		Title: "Appended Item",
+		Link:  "https://example.com/appended",
+		GUID:  "append-guid",
+	}
+
+	printItem("https://example.com/feed", item)
+	file.Close()
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "Initial content") {
+		t.Error("output file should preserve initial content")
+	}
+	if !strings.Contains(contentStr, "Appended Item") {
+		t.Error("output file should contain appended item")
+	}
+}
+
+func TestPrintItemConcurrentWrites(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "test_concurrent.txt")
+
+	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	originalOutputFile := outputFile
+	defer func() {
+		outputFile = originalOutputFile
+		file.Close()
+	}()
+
+	outputFile = file
+
+	var wg sync.WaitGroup
+	numGoroutines := 10
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			item := &Item{
+				Title: fmt.Sprintf("Item %d", id),
+				Link:  fmt.Sprintf("https://example.com/item%d", id),
+				GUID:  fmt.Sprintf("guid-%d", id),
+			}
+
+			printItem("https://example.com/feed", item)
+		}(i)
+	}
+
+	wg.Wait()
+	file.Close()
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	contentStr := string(content)
+	for i := 0; i < numGoroutines; i++ {
+		expectedTitle := fmt.Sprintf("Item %d", i)
+		if !strings.Contains(contentStr, expectedTitle) {
+			t.Errorf("output file should contain '%s'", expectedTitle)
+		}
+	}
+}
+
+func TestPrintItemWithMinimalFields(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "test_minimal.txt")
+
+	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	originalOutputFile := outputFile
+	defer func() {
+		outputFile = originalOutputFile
+		file.Close()
+	}()
+
+	outputFile = file
+
+	item := &Item{
+		Title: "Minimal Item",
+		Link:  "https://example.com/minimal",
+	}
+
+	printItem("https://example.com/feed", item)
+	file.Close()
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "Minimal Item") {
+		t.Error("output should contain title")
+	}
+	if !strings.Contains(contentStr, "https://example.com/minimal") {
+		t.Error("output should contain link")
+	}
+	if strings.Contains(contentStr, "Description:") {
+		t.Error("output should not contain description field when empty")
+	}
+	if strings.Contains(contentStr, "Published:") {
+		t.Error("output should not contain published field when empty")
+	}
 }
 
 func TestCharsetReaderUTF8(t *testing.T) {

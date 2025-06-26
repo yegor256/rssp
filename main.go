@@ -48,7 +48,11 @@ type HTTPClient interface {
 	Get(url string) (*http.Response, error)
 }
 
-var client HTTPClient = http.DefaultClient
+var (
+	client HTTPClient = http.DefaultClient
+	outputFile *os.File
+	outputMutex sync.Mutex
+)
 
 func main() {
 	flag.Usage = func() {
@@ -56,11 +60,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] uri1 uri2 ...\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExample:\n")
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  %s https://example.com/rss.xml https://another.com/feed.xml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --output feed.txt https://example.com/rss.xml\n", os.Args[0])
 	}
 
 	help := flag.Bool("help", false, "Show help message")
+	output := flag.String("output", "", "Output file for RSS items (default: stdout)")
 	flag.Parse()
 
 	if *help {
@@ -73,6 +79,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: No URIs provided\n")
 		flag.Usage()
 		os.Exit(1)
+	}
+
+	if *output != "" {
+		var err error
+		outputFile, err = os.OpenFile(*output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error opening output file: %v\n", err)
+			os.Exit(1)
+		}
+		defer outputFile.Close()
+		fmt.Printf("Output will be written to: %s\n", *output)
+	} else {
+		outputFile = os.Stdout
 	}
 
 	states := make([]*FeedState, len(uris))
@@ -191,14 +210,21 @@ func charsetReader(charset string, input io.Reader) (io.Reader, error) {
 }
 
 func printItem(feedURL string, item *Item) {
-	fmt.Printf("\n[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), feedURL)
-	fmt.Printf("Title: %s\n", item.Title)
-	fmt.Printf("Link: %s\n", item.Link)
+	outputMutex.Lock()
+	defer outputMutex.Unlock()
+
+	fmt.Fprintf(outputFile, "\n[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), feedURL)
+	fmt.Fprintf(outputFile, "Title: %s\n", item.Title)
+	fmt.Fprintf(outputFile, "Link: %s\n", item.Link)
 	if item.Description != "" {
-		fmt.Printf("Description: %s\n", item.Description)
+		fmt.Fprintf(outputFile, "Description: %s\n", item.Description)
 	}
 	if item.PubDate != "" {
-		fmt.Printf("Published: %s\n", item.PubDate)
+		fmt.Fprintf(outputFile, "Published: %s\n", item.PubDate)
 	}
-	fmt.Println("---")
+	fmt.Fprintf(outputFile, "---\n")
+
+	if outputFile != os.Stdout {
+		outputFile.Sync()
+	}
 }

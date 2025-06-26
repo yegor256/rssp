@@ -49,6 +49,11 @@ Monitor multiple RSS feeds:
 rssp https://news.ycombinator.com/rss https://example.com/feed.xml
 ```
 
+Save output to a file (appends to existing content):
+```bash
+rssp --output feed.txt https://example.com/rss.xml
+```
+
 Show help:
 ```bash
 rssp --help
@@ -58,9 +63,10 @@ rssp --help
 
 1. The tool accepts one or more RSS feed URLs as command-line arguments
 2. It polls each feed every 30 seconds for new content
-3. New items are printed to stdout with timestamps
+3. New items are printed to stdout (or to a file if `--output` is specified) with timestamps
 4. Items are deduplicated using their GUID (or link if GUID is not available)
-5. The tool runs continuously in the foreground until interrupted
+5. When using `--output`, content is appended to the file, preserving existing content
+6. The tool runs continuously in the foreground until interrupted
 
 ## Output Format
 
