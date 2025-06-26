@@ -4,14 +4,19 @@
 package main
 
 import (
+	"bytes"
 	"encoding/xml"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
 )
 
 type RSS struct {
@@ -147,12 +152,42 @@ func fetchFeed(url string) (*RSS, error) {
 }
 
 func parseFeed(data []byte) (*RSS, error) {
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = charsetReader
+
 	var rss RSS
-	err := xml.Unmarshal(data, &rss)
+	err := decoder.Decode(&rss)
 	if err != nil {
 		return nil, err
 	}
 	return &rss, nil
+}
+
+func charsetReader(charset string, input io.Reader) (io.Reader, error) {
+	charset = strings.ToLower(charset)
+
+	switch charset {
+	case "utf-8", "":
+		return input, nil
+	case "windows-1251", "cp1251":
+		return transform.NewReader(input, charmap.Windows1251.NewDecoder()), nil
+	case "windows-1252", "cp1252":
+		return transform.NewReader(input, charmap.Windows1252.NewDecoder()), nil
+	case "iso-8859-1", "latin1":
+		return transform.NewReader(input, charmap.ISO8859_1.NewDecoder()), nil
+	case "iso-8859-2", "latin2":
+		return transform.NewReader(input, charmap.ISO8859_2.NewDecoder()), nil
+	case "iso-8859-5":
+		return transform.NewReader(input, charmap.ISO8859_5.NewDecoder()), nil
+	case "iso-8859-15":
+		return transform.NewReader(input, charmap.ISO8859_15.NewDecoder()), nil
+	case "koi8-r":
+		return transform.NewReader(input, charmap.KOI8R.NewDecoder()), nil
+	case "koi8-u":
+		return transform.NewReader(input, charmap.KOI8U.NewDecoder()), nil
+	default:
+		return nil, fmt.Errorf("unsupported charset: %s", charset)
+	}
 }
 
 func printItem(feedURL string, item *Item) {

@@ -15,15 +15,15 @@ jobs:
     strategy:
       matrix:
         go-version: ['1.20', '1.21', '1.22']
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
         go-version: ${{ matrix.go-version }}
-    
+
     - name: Cache Go modules
       uses: actions/cache@v3
       with:
@@ -31,25 +31,25 @@ jobs:
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-
-    
+
     - name: Install dependencies
       run: go mod download
-    
+
     - name: Run tests
       run: go test -v ./...
-    
+
     - name: Run tests with race detector
       run: go test -race -v ./...
-    
+
     - name: Generate coverage report
       run: go test -coverprofile=coverage.out ./...
-    
+
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
         file: ./coverage.out
         flags: unittests
         name: codecov-umbrella
-    
+
     - name: Build
       run: go build -v ./...

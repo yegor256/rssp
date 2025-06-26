@@ -10,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
 )
 
 type mockHTTPClient struct {
@@ -515,4 +518,154 @@ func (c *closeErrorBody) Read(p []byte) (n int, err error) {
 		return 0, errors.New("already closed")
 	}
 	return 0, errors.New("read error")
+}
+
+func TestCharsetReaderUTF8(t *testing.T) {
+	input := strings.NewReader("test content")
+	reader, err := charsetReader("utf-8", input)
+	if err != nil {
+		t.Fatalf("charsetReader returned error for UTF-8: %v", err)
+	}
+	if reader != input {
+		t.Error("charsetReader should return original reader for UTF-8")
+	}
+}
+
+func TestCharsetReaderEmptyCharset(t *testing.T) {
+	input := strings.NewReader("test content")
+	reader, err := charsetReader("", input)
+	if err != nil {
+		t.Fatalf("charsetReader returned error for empty charset: %v", err)
+	}
+	if reader != input {
+		t.Error("charsetReader should return original reader for empty charset")
+	}
+}
+
+func TestCharsetReaderWindows1251(t *testing.T) {
+	input := strings.NewReader("test content")
+	reader, err := charsetReader("windows-1251", input)
+	if err != nil {
+		t.Fatalf("charsetReader returned error for windows-1251: %v", err)
+	}
+	if reader == input {
+		t.Error("charsetReader should return transformed reader for windows-1251")
+	}
+}
+
+func TestCharsetReaderUnsupportedCharset(t *testing.T) {
+	input := strings.NewReader("test content")
+	_, err := charsetReader("unsupported-charset", input)
+	if err == nil {
+		t.Error("charsetReader should return error for unsupported charset")
+	}
+	if !strings.Contains(err.Error(), "unsupported charset") {
+		t.Errorf("expected 'unsupported charset' in error, got: %v", err)
+	}
+}
+
+func TestParseFeedWithWindows1251Encoding(t *testing.T) {
+	originalText := "Тест на русском языке"
+
+	encoder := charmap.Windows1251.NewEncoder()
+	encoded, _, err := transform.String(encoder, originalText)
+	if err != nil {
+		t.Fatalf("failed to encode text: %v", err)
+	}
+
+	xml := `<?xml version="1.0" encoding="windows-1251"?>
+<rss version="2.0">
+	<channel>
+		<title>` + encoded + `</title>
+		<item>
+			<title>` + encoded + `</title>
+			<link>https://example.com/item</link>
+		</item>
+	</channel>
+</rss>`
+
+	feed, err := parseFeed([]byte(xml))
+	if err != nil {
+		t.Fatalf("parseFeed returned error for windows-1251: %v", err)
+	}
+
+	if feed.Channel.Title != originalText {
+		t.Errorf("expected title '%s', got '%s'", originalText, feed.Channel.Title)
+	}
+
+	if len(feed.Channel.Items) != 1 {
+		t.Errorf("expected 1 item, got %d", len(feed.Channel.Items))
+	}
+
+	if feed.Channel.Items[0].Title != originalText {
+		t.Errorf("expected item title '%s', got '%s'", originalText, feed.Channel.Items[0].Title)
+	}
+}
+
+func TestParseFeedWithISO88591Encoding(t *testing.T) {
+	originalText := "Café français"
+
+	encoder := charmap.ISO8859_1.NewEncoder()
+	encoded, _, err := transform.String(encoder, originalText)
+	if err != nil {
+		t.Fatalf("failed to encode text: %v", err)
+	}
+
+	xml := `<?xml version="1.0" encoding="iso-8859-1"?>
+<rss version="2.0">
+	<channel>
+		<title>` + encoded + `</title>
+		<item>
+			<title>` + encoded + `</title>
+			<link>https://example.com/item</link>
+		</item>
+	</channel>
+</rss>`
+
+	feed, err := parseFeed([]byte(xml))
+	if err != nil {
+		t.Fatalf("parseFeed returned error for iso-8859-1: %v", err)
+	}
+
+	if feed.Channel.Title != originalText {
+		t.Errorf("expected title '%s', got '%s'", originalText, feed.Channel.Title)
+	}
+}
+
+func TestCharsetReaderCaseInsensitive(t *testing.T) {
+	testCases := []string{
+		"WINDOWS-1251",
+		"Windows-1251",
+		"windows-1251",
+		"CP1251",
+		"cp1251",
+	}
+
+	for _, charset := range testCases {
+		input := strings.NewReader("test")
+		reader, err := charsetReader(charset, input)
+		if err != nil {
+			t.Errorf("charsetReader failed for charset '%s': %v", charset, err)
+		}
+		if reader == input {
+			t.Errorf("charsetReader should transform for charset '%s'", charset)
+		}
+	}
+}
+
+func TestParseFeedWithUnsupportedCharset(t *testing.T) {
+	xml := `<?xml version="1.0" encoding="unsupported-encoding"?>
+<rss version="2.0">
+	<channel>
+		<title>Test</title>
+	</channel>
+</rss>`
+
+	_, err := parseFeed([]byte(xml))
+	if err == nil {
+		t.Error("parseFeed should return error for unsupported charset")
+	}
+	if !strings.Contains(err.Error(), "unsupported charset") {
+		t.Errorf("expected 'unsupported charset' in error, got: %v", err)
+	}
 }
