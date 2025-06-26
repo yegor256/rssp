@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -52,6 +53,7 @@ var (
 	client HTTPClient = http.DefaultClient
 	outputFile *os.File
 	outputMutex sync.Mutex
+	logger *log.Logger
 )
 
 func main() {
@@ -102,6 +104,16 @@ func main() {
 		}
 	}
 
+	logger = log.New(os.Stderr, "[RSSP] ", log.LstdFlags)
+	logger.Printf("Starting RSS Stream Processor for %d feeds", len(uris))
+	for i, uri := range uris {
+		logger.Printf("Feed %d: %s", i+1, uri)
+	}
+	if *output != "" {
+		logger.Printf("Output destination: %s (append mode)", *output)
+	} else {
+		logger.Printf("Output destination: stdout")
+	}
 	fmt.Printf("Starting RSS Stream Processor for %d feeds\n", len(uris))
 
 	var wg sync.WaitGroup
@@ -119,13 +131,20 @@ func main() {
 func pollFeed(state *FeedState) {
 	firstRun := true
 	for {
+		logger.Printf("Checking feed: %s", state.url)
 		feed, err := fetchFeed(state.url)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error fetching %s: %v\n", state.url, err)
+			logger.Printf("Error fetching %s: %v - retrying in 30 seconds", state.url, err)
 			time.Sleep(30 * time.Second)
 			continue
 		}
 
+		logger.Printf("Successfully fetched %s - found %d total items", state.url, len(feed.Channel.Items))
+		if feed.Channel.Title != "" {
+			logger.Printf("Feed title: %s", feed.Channel.Title)
+		}
+
+		newItemsCount := 0
 		state.mutex.Lock()
 		for _, item := range feed.Channel.Items {
 			id := getItemID(&item)
@@ -133,13 +152,24 @@ func pollFeed(state *FeedState) {
 			if !state.items[id] {
 				state.items[id] = true
 				if !firstRun {
+					newItemsCount++
+					logger.Printf("New item found: '%s' from %s", item.Title, state.url)
 					printItem(state.url, &item)
 				}
 			}
 		}
 		state.mutex.Unlock()
 
+		if firstRun {
+			logger.Printf("Initial load completed for %s - loaded %d existing items", state.url, len(feed.Channel.Items))
+		} else if newItemsCount > 0 {
+			logger.Printf("Found %d new items from %s", newItemsCount, state.url)
+		} else {
+			logger.Printf("No new items found in %s", state.url)
+		}
+
 		firstRun = false
+		logger.Printf("Sleeping for 30 seconds before next check of %s", state.url)
 		time.Sleep(30 * time.Second)
 	}
 }
@@ -152,38 +182,44 @@ func getItemID(item *Item) string {
 }
 
 func fetchFeed(url string) (*RSS, error) {
+	logger.Printf("Making HTTP request to %s", url)
 	resp, err := client.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
+	logger.Printf("HTTP response from %s: %s", url, resp.Status)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP error: %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	logger.Printf("Downloaded %d bytes from %s", len(body), url)
 	return parseFeed(body)
 }
 
 func parseFeed(data []byte) (*RSS, error) {
+	logger.Printf("Parsing RSS XML data (%d bytes)", len(data))
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.CharsetReader = charsetReader
 
 	var rss RSS
 	err := decoder.Decode(&rss)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("XML parsing failed: %w", err)
 	}
+	logger.Printf("Successfully parsed RSS feed with %d items", len(rss.Channel.Items))
 	return &rss, nil
 }
 
 func charsetReader(charset string, input io.Reader) (io.Reader, error) {
 	charset = strings.ToLower(charset)
+	logger.Printf("Converting charset: %s", charset)
 
 	switch charset {
 	case "utf-8", "":
@@ -213,6 +249,7 @@ func printItem(feedURL string, item *Item) {
 	outputMutex.Lock()
 	defer outputMutex.Unlock()
 
+	logger.Printf("Writing item to output: '%s' (ID: %s)", item.Title, getItemID(item))
 	fmt.Fprintf(outputFile, "\n[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), feedURL)
 	fmt.Fprintf(outputFile, "Title: %s\n", item.Title)
 	fmt.Fprintf(outputFile, "Link: %s\n", item.Link)
@@ -226,5 +263,6 @@ func printItem(feedURL string, item *Item) {
 
 	if outputFile != os.Stdout {
 		outputFile.Sync()
+		logger.Printf("Item written to file and synced")
 	}
 }
