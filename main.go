@@ -39,6 +39,12 @@ type FeedState struct {
 	mutex sync.Mutex
 }
 
+type HTTPClient interface {
+	Get(url string) (*http.Response, error)
+}
+
+var client HTTPClient = http.DefaultClient
+
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "RSS Stream Processor (rssp)\n\n")
@@ -98,10 +104,7 @@ func pollFeed(state *FeedState) {
 
 		state.mutex.Lock()
 		for _, item := range feed.Channel.Items {
-			id := item.GUID
-			if id == "" {
-				id = item.Link
-			}
+			id := getItemID(&item)
 
 			if !state.items[id] {
 				state.items[id] = true
@@ -117,8 +120,15 @@ func pollFeed(state *FeedState) {
 	}
 }
 
+func getItemID(item *Item) string {
+	if item.GUID != "" {
+		return item.GUID
+	}
+	return item.Link
+}
+
 func fetchFeed(url string) (*RSS, error) {
-	resp, err := http.Get(url)
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -133,12 +143,15 @@ func fetchFeed(url string) (*RSS, error) {
 		return nil, err
 	}
 
+	return parseFeed(body)
+}
+
+func parseFeed(data []byte) (*RSS, error) {
 	var rss RSS
-	err = xml.Unmarshal(body, &rss)
+	err := xml.Unmarshal(data, &rss)
 	if err != nil {
 		return nil, err
 	}
-
 	return &rss, nil
 }
 
