@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2025 The Authors
+# SPDX-License-Identifier: MIT
+
+rssp
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
