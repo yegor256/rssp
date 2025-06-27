@@ -63,6 +63,24 @@ type DiffbotArticle struct {
 	Date  string `json:"date"`
 }
 
+type OpenAIRequest struct {
+	Model    string    `json:"model"`
+	Messages []Message `json:"messages"`
+}
+
+type Message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type OpenAIResponse struct {
+	Choices []Choice `json:"choices"`
+}
+
+type Choice struct {
+	Message Message `json:"message"`
+}
+
 var (
 	client      HTTPClient = http.DefaultClient
 	outputFile  *os.File
@@ -71,6 +89,7 @@ var (
 	fullOutput  bool
 	authored    bool
 	maxLength   int
+	focus       string
 )
 
 func main() {
@@ -84,6 +103,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  %s --output feed.txt https://example.com/rss.xml\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --full https://example.com/rss.xml\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --authored https://example.com/rss.xml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --focus \"artificial intelligence\" https://example.com/rss.xml\n", os.Args[0])
 	}
 
 	help := flag.Bool("help", false, "Show help message")
@@ -91,6 +111,7 @@ func main() {
 	full := flag.Bool("full", false, "Show full item details (title, link, description, date)")
 	auth := flag.Bool("authored", false, "Include channel name in output")
 	maxLen := flag.Int("max-length", 10000, "Maximum length of article text to extract")
+	focusFlag := flag.String("focus", "", "Topic focus for OpenAI content filtering (requires OPENAI_API_KEY)")
 	flag.Parse()
 
 	if *help {
@@ -121,6 +142,7 @@ func main() {
 	fullOutput = *full
 	authored = *auth
 	maxLength = *maxLen
+	focus = *focusFlag
 
 	states := make([]*FeedState, len(uris))
 	for i, uri := range uris {
@@ -440,6 +462,109 @@ func extractMainText(html string) string {
 	return text
 }
 
+func processWithOpenAI(content string, topic string) (string, bool) {
+	token := os.Getenv("OPENAI_API_KEY")
+	if token == "" {
+		if logger != nil {
+			logger.Printf("OPENAI_API_KEY not set, skipping content filtering")
+		}
+		return content, true
+	}
+	
+	prompt := fmt.Sprintf("Please do two things with the following text: 1) Compress it into a single paragraph without losing the essence of the content, and 2) Determine if it's relevant to the topic '%s'. Respond with 'RELEVANT:' followed by your compressed text if relevant, or 'NOT_RELEVANT' if not relevant.\n\nText: %s", topic, content)
+	
+	request := OpenAIRequest{
+		Model: "gpt-3.5-turbo",
+		Messages: []Message{
+			{
+				Role:    "user",
+				Content: prompt,
+			},
+		},
+	}
+	
+	requestBody, err := json.Marshal(request)
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to marshal OpenAI request: %v", err)
+		}
+		return content, true
+	}
+	
+	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(requestBody))
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to create OpenAI request: %v", err)
+		}
+		return content, true
+	}
+	
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to send OpenAI request: %v", err)
+		}
+		return content, true
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		if logger != nil {
+			logger.Printf("OpenAI API error %d, keeping content", resp.StatusCode)
+		}
+		return content, true
+	}
+	
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to read OpenAI response: %v", err)
+		}
+		return content, true
+	}
+	
+	var openaiResp OpenAIResponse
+	err = json.Unmarshal(body, &openaiResp)
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to parse OpenAI response: %v", err)
+		}
+		return content, true
+	}
+	
+	if len(openaiResp.Choices) == 0 {
+		if logger != nil {
+			logger.Printf("No choices in OpenAI response, keeping content")
+		}
+		return content, true
+	}
+	
+	response := openaiResp.Choices[0].Message.Content
+	if strings.HasPrefix(response, "NOT_RELEVANT") {
+		if logger != nil {
+			logger.Printf("Content marked as not relevant to topic '%s', filtering out", topic)
+		}
+		return "", false
+	}
+	
+	if strings.HasPrefix(response, "RELEVANT:") {
+		compressed := strings.TrimSpace(strings.TrimPrefix(response, "RELEVANT:"))
+		if logger != nil {
+			logger.Printf("Content compressed from %d to %d characters", len(content), len(compressed))
+		}
+		return compressed, true
+	}
+	
+	if logger != nil {
+		logger.Printf("Unexpected OpenAI response format, keeping original content")
+	}
+	return content, true
+}
+
 func printItem(feedURL string, item *Item, channelTitle string) {
 	outputMutex.Lock()
 	defer outputMutex.Unlock()
@@ -457,6 +582,32 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 		if webContent != "" && logger != nil {
 			logger.Printf("Successfully extracted %d characters of content from %s", len(webContent), item.Link)
 		}
+	}
+	
+	contentToProcess := webContent
+	if contentToProcess == "" && item.Description != "" {
+		contentToProcess = strip(item.Description)
+	}
+	
+	shouldPrint := true
+	if focus != "" && contentToProcess != "" {
+		processed, relevant := processWithOpenAI(contentToProcess, focus)
+		if relevant {
+			if webContent != "" {
+				webContent = processed
+			} else if item.Description != "" {
+				item.Description = processed
+			}
+		} else {
+			shouldPrint = false
+		}
+	}
+	
+	if !shouldPrint {
+		if logger != nil {
+			logger.Printf("Item filtered out as not relevant to focus topic '%s'", focus)
+		}
+		return
 	}
 
 	if fullOutput {
