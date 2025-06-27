@@ -9,4 +9,4 @@ rssp
 *.test
 *.out
 .claude/
-*.txt
+news.txt

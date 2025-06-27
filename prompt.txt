@@ -1,0 +1,3 @@
+Please do two things with the following text: 1) Compress it into a single paragraph without losing the essence of the content, and 2) Determine if it's relevant to the topic '{{.Topic}}'. IMPORTANT: Keep the same language as the original text - do not translate or change the language. When compressing, preserve all names of people, places, organizations, and other proper nouns - do not drop or omit any names from news articles. Respond with 'RELEVANT:' followed by your compressed text if relevant, or 'NOT_RELEVANT' if not relevant.
+
+Text: {{.Content}}
