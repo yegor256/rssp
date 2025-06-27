@@ -54,6 +54,17 @@ Save output to a file (appends to existing content):
 rssp --output feed.txt https://example.com/rss.xml
 ```
 
+Use Diffbot for enhanced content extraction:
+```bash
+export DIFFBOT_TOKEN=your_diffbot_token
+rssp https://example.com/rss.xml
+```
+
+Limit extracted content length:
+```bash
+rssp --max-length 5000 https://example.com/rss.xml
+```
+
 Show help:
 ```bash
 rssp --help
@@ -68,6 +79,15 @@ rssp --help
 5. When using `--output`, content is appended to the file, preserving existing content
 6. The tool runs continuously in the foreground until interrupted
 
+### Content Extraction
+
+RSSP can extract full article content from links using two methods:
+
+- **Diffbot API (recommended)**: Set the `DIFFBOT_TOKEN` environment variable to enable enhanced content extraction via Diffbot's Article API
+- **Basic extraction**: Falls back to HTML parsing when Diffbot is unavailable
+
+The extracted content is included in the output when items are processed.
+
 ## Output Format
 
 New items are printed in the following format:
@@ -77,6 +97,7 @@ New items are printed in the following format:
 Title: Article Title
 Link: https://example.com/article
 Description: Article description (if available)
+Content: Full article content extracted via Diffbot or basic HTML parsing (if available)
 Published: Mon, 15 Jan 2024 10:30:00 GMT (if available)
 ---
 ```
