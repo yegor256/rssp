@@ -8,3 +8,5 @@ rssp
 *.dylib
 *.test
 *.out
+.claude/
+*.txt

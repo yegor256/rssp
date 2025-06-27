@@ -54,6 +54,7 @@ var (
 	outputFile *os.File
 	outputMutex sync.Mutex
 	logger *log.Logger
+	fullOutput bool
 )
 
 func main() {
@@ -65,10 +66,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  %s https://example.com/rss.xml https://another.com/feed.xml\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --output feed.txt https://example.com/rss.xml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --full https://example.com/rss.xml\n", os.Args[0])
 	}
 
 	help := flag.Bool("help", false, "Show help message")
 	output := flag.String("output", "", "Output file for RSS items (default: stdout)")
+	full := flag.Bool("full", false, "Show full item details (title, link, description, date)")
 	flag.Parse()
 
 	if *help {
@@ -95,6 +98,8 @@ func main() {
 	} else {
 		outputFile = os.Stdout
 	}
+
+	fullOutput = *full
 
 	states := make([]*FeedState, len(uris))
 	for i, uri := range uris {
@@ -182,14 +187,18 @@ func getItemID(item *Item) string {
 }
 
 func fetchFeed(url string) (*RSS, error) {
-	logger.Printf("Making HTTP request to %s", url)
+	if logger != nil {
+		logger.Printf("Making HTTP request to %s", url)
+	}
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	logger.Printf("HTTP response from %s: %s", url, resp.Status)
+	if logger != nil {
+		logger.Printf("HTTP response from %s: %s", url, resp.Status)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP error: %s", resp.Status)
 	}
@@ -199,12 +208,16 @@ func fetchFeed(url string) (*RSS, error) {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	logger.Printf("Downloaded %d bytes from %s", len(body), url)
+	if logger != nil {
+		logger.Printf("Downloaded %d bytes from %s", len(body), url)
+	}
 	return parseFeed(body)
 }
 
 func parseFeed(data []byte) (*RSS, error) {
-	logger.Printf("Parsing RSS XML data (%d bytes)", len(data))
+	if logger != nil {
+		logger.Printf("Parsing RSS XML data (%d bytes)", len(data))
+	}
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.CharsetReader = charsetReader
 
@@ -213,13 +226,17 @@ func parseFeed(data []byte) (*RSS, error) {
 	if err != nil {
 		return nil, fmt.Errorf("XML parsing failed: %w", err)
 	}
-	logger.Printf("Successfully parsed RSS feed with %d items", len(rss.Channel.Items))
+	if logger != nil {
+		logger.Printf("Successfully parsed RSS feed with %d items", len(rss.Channel.Items))
+	}
 	return &rss, nil
 }
 
 func charsetReader(charset string, input io.Reader) (io.Reader, error) {
 	charset = strings.ToLower(charset)
-	logger.Printf("Converting charset: %s", charset)
+	if logger != nil {
+		logger.Printf("Converting charset: %s", charset)
+	}
 
 	switch charset {
 	case "utf-8", "":
@@ -245,24 +262,62 @@ func charsetReader(charset string, input io.Reader) (io.Reader, error) {
 	}
 }
 
+func parseDate(pubDate string) string {
+	if pubDate == "" {
+		return ""
+	}
+	layouts := []string{
+		time.RFC1123,
+		time.RFC1123Z,
+		time.RFC822,
+		time.RFC822Z,
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02T15:04:05Z",
+		"2006-01-02 15:04:05",
+		"Mon, 2 Jan 2006 15:04:05 MST",
+		"Mon, 2 Jan 2006 15:04:05 -0700",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, pubDate); err == nil {
+			return t.Format("02-01-2006")
+		}
+	}
+	return pubDate
+}
+
 func printItem(feedURL string, item *Item) {
 	outputMutex.Lock()
 	defer outputMutex.Unlock()
 
-	logger.Printf("Writing item to output: '%s' (ID: %s)", item.Title, getItemID(item))
-	fmt.Fprintf(outputFile, "\n[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), feedURL)
-	fmt.Fprintf(outputFile, "Title: %s\n", item.Title)
-	fmt.Fprintf(outputFile, "Link: %s\n", item.Link)
-	if item.Description != "" {
-		fmt.Fprintf(outputFile, "Description: %s\n", item.Description)
+	if logger != nil {
+		logger.Printf("Writing item to output: '%s' (ID: %s)", item.Title, getItemID(item))
 	}
-	if item.PubDate != "" {
-		fmt.Fprintf(outputFile, "Published: %s\n", item.PubDate)
+	if fullOutput {
+		fmt.Fprintf(outputFile, "\n[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), feedURL)
+		fmt.Fprintf(outputFile, "Title: %s\n", item.Title)
+		fmt.Fprintf(outputFile, "Link: %s\n", item.Link)
+		if item.Description != "" {
+			fmt.Fprintf(outputFile, "Description: %s\n", item.Description)
+		}
+		if item.PubDate != "" {
+			fmt.Fprintf(outputFile, "Published: %s\n", item.PubDate)
+		}
+		fmt.Fprintf(outputFile, "---\n")
+	} else {
+		date := parseDate(item.PubDate)
+		if date != "" {
+			fmt.Fprintf(outputFile, "%s ", date)
+		}
+		if item.Description != "" {
+			fmt.Fprintf(outputFile, "%s", item.Description)
+		}
+		fmt.Fprintf(outputFile, "\n")
 	}
-	fmt.Fprintf(outputFile, "---\n")
 
 	if outputFile != os.Stdout {
 		outputFile.Sync()
-		logger.Printf("Item written to file and synced")
+		if logger != nil {
+			logger.Printf("Item written to file and synced")
+		}
 	}
 }

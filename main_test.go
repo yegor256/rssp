@@ -550,12 +550,15 @@ func TestPrintItemToFile(t *testing.T) {
 	}
 
 	originalOutputFile := outputFile
+	originalFullOutput := fullOutput
 	defer func() {
 		outputFile = originalOutputFile
+		fullOutput = originalFullOutput
 		file.Close()
 	}()
 
 	outputFile = file
+	fullOutput = true
 
 	item := &Item{
 		Title:       "Test Item",
@@ -603,12 +606,15 @@ func TestPrintItemAppendMode(t *testing.T) {
 	}
 
 	originalOutputFile := outputFile
+	originalFullOutput := fullOutput
 	defer func() {
 		outputFile = originalOutputFile
+		fullOutput = originalFullOutput
 		file.Close()
 	}()
 
 	outputFile = file
+	fullOutput = true
 
 	item := &Item{
 		Title: "Appended Item",
@@ -643,12 +649,15 @@ func TestPrintItemConcurrentWrites(t *testing.T) {
 	}
 
 	originalOutputFile := outputFile
+	originalFullOutput := fullOutput
 	defer func() {
 		outputFile = originalOutputFile
+		fullOutput = originalFullOutput
 		file.Close()
 	}()
 
 	outputFile = file
+	fullOutput = true
 
 	var wg sync.WaitGroup
 	numGoroutines := 10
@@ -695,12 +704,15 @@ func TestPrintItemWithMinimalFields(t *testing.T) {
 	}
 
 	originalOutputFile := outputFile
+	originalFullOutput := fullOutput
 	defer func() {
 		outputFile = originalOutputFile
+		fullOutput = originalFullOutput
 		file.Close()
 	}()
 
 	outputFile = file
+	fullOutput = true
 
 	item := &Item{
 		Title: "Minimal Item",
@@ -727,6 +739,213 @@ func TestPrintItemWithMinimalFields(t *testing.T) {
 	}
 	if strings.Contains(contentStr, "Published:") {
 		t.Error("output should not contain published field when empty")
+	}
+}
+
+func TestPrintItemCompactOutput(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "test_compact.txt")
+
+	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	originalOutputFile := outputFile
+	originalFullOutput := fullOutput
+	defer func() {
+		outputFile = originalOutputFile
+		fullOutput = originalFullOutput
+		file.Close()
+	}()
+
+	outputFile = file
+	fullOutput = false
+
+	item := &Item{
+		Title:       "Test Item",
+		Link:        "https://example.com/item",
+		Description: "Test Description",
+		PubDate:     "Mon, 15 Mar 2023 10:30:00 GMT",
+		GUID:        "test-guid",
+	}
+
+	printItem("https://example.com/feed", item)
+	file.Close()
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "15-03-2023") {
+		t.Error("output should contain formatted date")
+	}
+	if !strings.Contains(contentStr, "Test Description") {
+		t.Error("output should contain description")
+	}
+	if strings.Contains(contentStr, "Title:") {
+		t.Error("compact output should not contain Title: prefix")
+	}
+	if strings.Contains(contentStr, "Link:") {
+		t.Error("compact output should not contain Link: prefix")
+	}
+	if strings.Contains(contentStr, "Published:") {
+		t.Error("compact output should not contain Published: prefix")
+	}
+	if strings.Contains(contentStr, "https://example.com/feed") {
+		t.Error("compact output should not contain feed URL")
+	}
+}
+
+func TestPrintItemFullOutput(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "test_full.txt")
+
+	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	originalOutputFile := outputFile
+	originalFullOutput := fullOutput
+	defer func() {
+		outputFile = originalOutputFile
+		fullOutput = originalFullOutput
+		file.Close()
+	}()
+
+	outputFile = file
+	fullOutput = true
+
+	item := &Item{
+		Title:       "Test Item",
+		Link:        "https://example.com/item",
+		Description: "Test Description",
+		PubDate:     "Mon, 15 Mar 2023 10:30:00 GMT",
+		GUID:        "test-guid",
+	}
+
+	printItem("https://example.com/feed", item)
+	file.Close()
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "Title: Test Item") {
+		t.Error("full output should contain title with prefix")
+	}
+	if !strings.Contains(contentStr, "Link: https://example.com/item") {
+		t.Error("full output should contain link with prefix")
+	}
+	if !strings.Contains(contentStr, "Description: Test Description") {
+		t.Error("full output should contain description with prefix")
+	}
+	if !strings.Contains(contentStr, "Published: Mon, 15 Mar 2023 10:30:00 GMT") {
+		t.Error("full output should contain original publish date")
+	}
+	if !strings.Contains(contentStr, "https://example.com/feed") {
+		t.Error("full output should contain feed URL")
+	}
+}
+
+func TestPrintItemCompactOutputNoDescription(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "test_compact_no_desc.txt")
+
+	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	originalOutputFile := outputFile
+	originalFullOutput := fullOutput
+	defer func() {
+		outputFile = originalOutputFile
+		fullOutput = originalFullOutput
+		file.Close()
+	}()
+
+	outputFile = file
+	fullOutput = false
+
+	item := &Item{
+		Title:   "Test Item",
+		Link:    "https://example.com/item",
+		PubDate: "Mon, 15 Mar 2023 10:30:00 GMT",
+		GUID:    "test-guid",
+	}
+
+	printItem("https://example.com/feed", item)
+	file.Close()
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "15-03-2023") {
+		t.Error("output should contain formatted date")
+	}
+	lines := strings.Split(strings.TrimSpace(contentStr), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected 1 line, got %d", len(lines))
+	}
+	if strings.TrimSpace(lines[0]) != "15-03-2023" {
+		t.Errorf("expected only date, got '%s'", lines[0])
+	}
+}
+
+func TestPrintItemCompactOutputNoDate(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "test_compact_no_date.txt")
+
+	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	originalOutputFile := outputFile
+	originalFullOutput := fullOutput
+	defer func() {
+		outputFile = originalOutputFile
+		fullOutput = originalFullOutput
+		file.Close()
+	}()
+
+	outputFile = file
+	fullOutput = false
+
+	item := &Item{
+		Title:       "Test Item",
+		Link:        "https://example.com/item",
+		Description: "Test Description without date",
+		GUID:        "test-guid",
+	}
+
+	printItem("https://example.com/feed", item)
+	file.Close()
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "Test Description without date") {
+		t.Error("output should contain description")
+	}
+	lines := strings.Split(strings.TrimSpace(contentStr), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected 1 line, got %d", len(lines))
+	}
+	if strings.TrimSpace(lines[0]) != "Test Description without date" {
+		t.Errorf("expected only description, got '%s'", lines[0])
 	}
 }
 
@@ -877,5 +1096,65 @@ func TestParseFeedWithUnsupportedCharset(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unsupported charset") {
 		t.Errorf("expected 'unsupported charset' in error, got: %v", err)
+	}
+}
+
+func TestParseDateWithRFC1123Format(t *testing.T) {
+	input := "Mon, 02 Jan 2006 15:04:05 MST"
+	result := parseDate(input)
+	if result != "02-01-2006" {
+		t.Errorf("expected '02-01-2006', got '%s'", result)
+	}
+}
+
+func TestParseDateWithRFC822Format(t *testing.T) {
+	input := "02 Jan 06 15:04 MST"
+	result := parseDate(input)
+	if result != "02-01-2006" {
+		t.Errorf("expected '02-01-2006', got '%s'", result)
+	}
+}
+
+func TestParseDateWithISOFormat(t *testing.T) {
+	input := "2006-01-02T15:04:05Z"
+	result := parseDate(input)
+	if result != "02-01-2006" {
+		t.Errorf("expected '02-01-2006', got '%s'", result)
+	}
+}
+
+func TestParseDateWithEmptyString(t *testing.T) {
+	result := parseDate("")
+	if result != "" {
+		t.Errorf("expected empty string, got '%s'", result)
+	}
+}
+
+func TestParseDateWithInvalidFormat(t *testing.T) {
+	input := "not a valid date"
+	result := parseDate(input)
+	if result != input {
+		t.Errorf("expected original string '%s', got '%s'", input, result)
+	}
+}
+
+func TestParseDateWithVariousFormats(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"Mon, 15 Mar 2023 10:30:00 GMT", "15-03-2023"},
+		{"Wed, 31 Dec 2025 23:59:59 +0000", "31-12-2025"},
+		{"2023-06-15T14:30:00Z", "15-06-2023"},
+		{"2023-06-15T14:30:00+02:00", "15-06-2023"},
+		{"2023-06-15 14:30:00", "15-06-2023"},
+		{"Thu, 1 Jan 2015 00:00:00 GMT", "01-01-2015"},
+	}
+
+	for _, tc := range testCases {
+		result := parseDate(tc.input)
+		if result != tc.expected {
+			t.Errorf("for input '%s', expected '%s', got '%s'", tc.input, tc.expected, result)
+		}
 	}
 }
