@@ -1276,3 +1276,66 @@ func TestIntegrationCompactOutputWithXMLFile(t *testing.T) {
 		}
 	}
 }
+
+func TestStripRemovesHTMLTags(t *testing.T) {
+	input := "<p>Hello <b>world</b>!</p>"
+	expected := "Hello world!"
+	result := strip(input)
+	if result != expected {
+		t.Errorf("strip failed to remove HTML tags properly: got %q, want %q", result, expected)
+	}
+}
+
+func TestStripHandlesNestedHTMLTags(t *testing.T) {
+	input := "<div><p>Text with <em><strong>nested</strong></em> tags</p></div>"
+	expected := "Text with nested tags"
+	result := strip(input)
+	if result != expected {
+		t.Errorf("strip failed to handle nested HTML tags: got %q, want %q", result, expected)
+	}
+}
+
+func TestStripPreservesPlainText(t *testing.T) {
+	input := "Plain text without HTML"
+	expected := "Plain text without HTML"
+	result := strip(input)
+	if result != expected {
+		t.Errorf("strip modified plain text: got %q, want %q", result, expected)
+	}
+}
+
+func TestStripHandlesEmptyString(t *testing.T) {
+	input := ""
+	expected := ""
+	result := strip(input)
+	if result != expected {
+		t.Errorf("strip failed with empty string: got %q, want %q", result, expected)
+	}
+}
+
+func TestStripHandlesHTMLWithAttributes(t *testing.T) {
+	input := `<a href="https://example.com" class="link">Click here</a>`
+	expected := "Click here"
+	result := strip(input)
+	if result != expected {
+		t.Errorf("strip failed to remove HTML tags with attributes: got %q, want %q", result, expected)
+	}
+}
+
+func TestStripHandlesSelfClosingTags(t *testing.T) {
+	input := "Text with <br/> line break"
+	expected := "Text with  line break"
+	result := strip(input)
+	if result != expected {
+		t.Errorf("strip failed to handle self-closing tags: got %q, want %q", result, expected)
+	}
+}
+
+func TestStripHandlesNonASCIIContent(t *testing.T) {
+	input := "<p>Тест с <b>русскими</b> символами</p>"
+	expected := "Тест с русскими символами"
+	result := strip(input)
+	if result != expected {
+		t.Errorf("strip failed with non-ASCII content: got %q, want %q", result, expected)
+	}
+}

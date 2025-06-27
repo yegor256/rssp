@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -289,6 +290,11 @@ func parseDate(pubDate string) string {
 	return pubDate
 }
 
+func strip(text string) string {
+	re := regexp.MustCompile(`<[^>]*>`)
+	return strings.TrimSpace(re.ReplaceAllString(text, ""))
+}
+
 func printItem(feedURL string, item *Item, channelTitle string) {
 	outputMutex.Lock()
 	defer outputMutex.Unlock()
@@ -298,10 +304,10 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 	}
 	if fullOutput {
 		fmt.Fprintf(outputFile, "\n[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), feedURL)
-		fmt.Fprintf(outputFile, "Title: %s\n", item.Title)
+		fmt.Fprintf(outputFile, "Title: %s\n", strip(item.Title))
 		fmt.Fprintf(outputFile, "Link: %s\n", item.Link)
 		if item.Description != "" {
-			fmt.Fprintf(outputFile, "Description: %s\n", item.Description)
+			fmt.Fprintf(outputFile, "Description: %s\n", strip(item.Description))
 		}
 		if item.PubDate != "" {
 			fmt.Fprintf(outputFile, "Published: %s\n", item.PubDate)
@@ -318,7 +324,7 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 			if hasContent {
 				fmt.Fprintf(outputFile, " ")
 			}
-			fmt.Fprintf(outputFile, "%s", item.Description)
+			fmt.Fprintf(outputFile, "%s", strip(item.Description))
 			hasContent = true
 		}
 		if authored && channelTitle != "" {
