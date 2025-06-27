@@ -1430,3 +1430,45 @@ func TestExtractContentWithNetworkError(t *testing.T) {
 		t.Errorf("extractContent should return empty string on network error: got %q", result)
 	}
 }
+
+func TestPrintItemWithEmptyContent(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "test_empty.txt")
+
+	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	originalOutputFile := outputFile
+	originalFullOutput := fullOutput
+	defer func() {
+		outputFile = originalOutputFile
+		fullOutput = originalFullOutput
+		file.Close()
+	}()
+
+	outputFile = file
+	fullOutput = false
+
+	item := &Item{
+		Title:       "Item with no content",
+		Link:        "https://example.com/empty",
+		Description: "",
+		PubDate:     "",
+		GUID:        "empty-guid",
+	}
+
+	printItem("https://example.com/feed", item, "")
+	file.Close()
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	contentStr := string(content)
+	if len(contentStr) > 0 {
+		t.Errorf("output should be empty when item has no displayable content, got %d bytes: %q", len(contentStr), contentStr)
+	}
+}

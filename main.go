@@ -432,8 +432,11 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 				fmt.Fprintf(outputFile, " ")
 			}
 			fmt.Fprintf(outputFile, "[%s]", channelTitle)
+			hasContent = true
 		}
-		fmt.Fprintf(outputFile, "\n\n")
+		if hasContent {
+			fmt.Fprintf(outputFile, "\n\n")
+		}
 	}
 
 	if outputFile != os.Stdout {
