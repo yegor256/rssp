@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2025 The Authors
+// SPDX-FileCopyrightText: Copyright (c) 2025 Yegor Bugayenko
 // SPDX-License-Identifier: MIT
 
 package main
@@ -159,7 +159,7 @@ func pollFeed(state *FeedState) {
 				if !firstRun {
 					newItemsCount++
 					logger.Printf("New item found: '%s' from %s", item.Title, state.url)
-					printItem(state.url, &item)
+					printItem(state.url, &item, feed.Channel.Title)
 				}
 			}
 		}
@@ -285,7 +285,7 @@ func parseDate(pubDate string) string {
 	return pubDate
 }
 
-func printItem(feedURL string, item *Item) {
+func printItem(feedURL string, item *Item, channelTitle string) {
 	outputMutex.Lock()
 	defer outputMutex.Unlock()
 
@@ -305,11 +305,23 @@ func printItem(feedURL string, item *Item) {
 		fmt.Fprintf(outputFile, "---\n")
 	} else {
 		date := parseDate(item.PubDate)
+		hasContent := false
 		if date != "" {
-			fmt.Fprintf(outputFile, "%s ", date)
+			fmt.Fprintf(outputFile, "%s", date)
+			hasContent = true
 		}
 		if item.Description != "" {
+			if hasContent {
+				fmt.Fprintf(outputFile, " ")
+			}
 			fmt.Fprintf(outputFile, "%s", item.Description)
+			hasContent = true
+		}
+		if channelTitle != "" {
+			if hasContent {
+				fmt.Fprintf(outputFile, " ")
+			}
+			fmt.Fprintf(outputFile, "[%s]", channelTitle)
 		}
 		fmt.Fprintf(outputFile, "\n")
 	}

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2025 The Authors
+// SPDX-FileCopyrightText: Copyright (c) 2025 Yegor Bugayenko
 // SPDX-License-Identifier: MIT
 
 package main
@@ -537,7 +537,7 @@ func TestPrintItemToStdout(t *testing.T) {
 		GUID:        "test-guid",
 	}
 
-	printItem("https://example.com/feed", item)
+	printItem("https://example.com/feed", item, "Test Channel")
 }
 
 func TestPrintItemToFile(t *testing.T) {
@@ -568,7 +568,7 @@ func TestPrintItemToFile(t *testing.T) {
 		GUID:        "test-guid",
 	}
 
-	printItem("https://example.com/feed", item)
+	printItem("https://example.com/feed", item, "Test Channel")
 	file.Close()
 
 	content, err := os.ReadFile(outputPath)
@@ -622,7 +622,7 @@ func TestPrintItemAppendMode(t *testing.T) {
 		GUID:  "append-guid",
 	}
 
-	printItem("https://example.com/feed", item)
+	printItem("https://example.com/feed", item, "Test Channel")
 	file.Close()
 
 	content, err := os.ReadFile(outputPath)
@@ -673,7 +673,7 @@ func TestPrintItemConcurrentWrites(t *testing.T) {
 				GUID:  fmt.Sprintf("guid-%d", id),
 			}
 
-			printItem("https://example.com/feed", item)
+			printItem("https://example.com/feed", item, "Test Channel")
 		}(i)
 	}
 
@@ -719,7 +719,7 @@ func TestPrintItemWithMinimalFields(t *testing.T) {
 		Link:  "https://example.com/minimal",
 	}
 
-	printItem("https://example.com/feed", item)
+	printItem("https://example.com/feed", item, "Test Channel")
 	file.Close()
 
 	content, err := os.ReadFile(outputPath)
@@ -770,7 +770,7 @@ func TestPrintItemCompactOutput(t *testing.T) {
 		GUID:        "test-guid",
 	}
 
-	printItem("https://example.com/feed", item)
+	printItem("https://example.com/feed", item, "Test Channel")
 	file.Close()
 
 	content, err := os.ReadFile(outputPath)
@@ -796,6 +796,9 @@ func TestPrintItemCompactOutput(t *testing.T) {
 	}
 	if strings.Contains(contentStr, "https://example.com/feed") {
 		t.Error("compact output should not contain feed URL")
+	}
+	if !strings.Contains(contentStr, "[Test Channel]") {
+		t.Error("compact output should contain channel name in brackets")
 	}
 }
 
@@ -827,7 +830,7 @@ func TestPrintItemFullOutput(t *testing.T) {
 		GUID:        "test-guid",
 	}
 
-	printItem("https://example.com/feed", item)
+	printItem("https://example.com/feed", item, "Test Channel")
 	file.Close()
 
 	content, err := os.ReadFile(outputPath)
@@ -880,7 +883,7 @@ func TestPrintItemCompactOutputNoDescription(t *testing.T) {
 		GUID:    "test-guid",
 	}
 
-	printItem("https://example.com/feed", item)
+	printItem("https://example.com/feed", item, "Test Channel")
 	file.Close()
 
 	content, err := os.ReadFile(outputPath)
@@ -892,12 +895,15 @@ func TestPrintItemCompactOutputNoDescription(t *testing.T) {
 	if !strings.Contains(contentStr, "15-03-2023") {
 		t.Error("output should contain formatted date")
 	}
+	if !strings.Contains(contentStr, "[Test Channel]") {
+		t.Error("compact output should contain channel name in brackets")
+	}
 	lines := strings.Split(strings.TrimSpace(contentStr), "\n")
 	if len(lines) != 1 {
 		t.Errorf("expected 1 line, got %d", len(lines))
 	}
-	if strings.TrimSpace(lines[0]) != "15-03-2023" {
-		t.Errorf("expected only date, got '%s'", lines[0])
+	if strings.TrimSpace(lines[0]) != "15-03-2023 [Test Channel]" {
+		t.Errorf("expected date with channel name, got '%s'", lines[0])
 	}
 }
 
@@ -928,7 +934,7 @@ func TestPrintItemCompactOutputNoDate(t *testing.T) {
 		GUID:        "test-guid",
 	}
 
-	printItem("https://example.com/feed", item)
+	printItem("https://example.com/feed", item, "Test Channel")
 	file.Close()
 
 	content, err := os.ReadFile(outputPath)
@@ -944,8 +950,8 @@ func TestPrintItemCompactOutputNoDate(t *testing.T) {
 	if len(lines) != 1 {
 		t.Errorf("expected 1 line, got %d", len(lines))
 	}
-	if strings.TrimSpace(lines[0]) != "Test Description without date" {
-		t.Errorf("expected only description, got '%s'", lines[0])
+	if strings.TrimSpace(lines[0]) != "Test Description without date [Test Channel]" {
+		t.Errorf("expected description with channel name, got '%s'", lines[0])
 	}
 }
 
@@ -1155,6 +1161,100 @@ func TestParseDateWithVariousFormats(t *testing.T) {
 		result := parseDate(tc.input)
 		if result != tc.expected {
 			t.Errorf("for input '%s', expected '%s', got '%s'", tc.input, tc.expected, result)
+		}
+	}
+}
+
+func TestIntegrationCompactOutputWithXMLFile(t *testing.T) {
+	tempDir := t.TempDir()
+	feedPath := filepath.Join(tempDir, "test_feed.xml")
+	outputPath := filepath.Join(tempDir, "output.txt")
+
+	feedContent := `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Tech News Feed</title>
+    <link>https://example.com</link>
+    <description>Latest technology news</description>
+    <item>
+      <title>Breaking: New AI Model Released</title>
+      <link>https://example.com/ai-news</link>
+      <description>Revolutionary AI model achieves breakthrough performance</description>
+      <pubDate>Mon, 15 Mar 2023 10:30:00 GMT</pubDate>
+      <guid>ai-news-001</guid>
+    </item>
+    <item>
+      <title>Security Update Available</title>
+      <link>https://example.com/security</link>
+      <description>Critical security patch for popular software</description>
+      <pubDate>Tue, 16 Mar 2023 14:00:00 GMT</pubDate>
+      <guid>security-002</guid>
+    </item>
+    <item>
+      <title>No Description Item</title>
+      <link>https://example.com/no-desc</link>
+      <pubDate>Wed, 17 Mar 2023 09:00:00 GMT</pubDate>
+      <guid>no-desc-003</guid>
+    </item>
+  </channel>
+</rss>`
+
+	err := os.WriteFile(feedPath, []byte(feedContent), 0644)
+	if err != nil {
+		t.Fatalf("failed to write test feed: %v", err)
+	}
+
+	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatalf("failed to create output file: %v", err)
+	}
+
+	originalOutputFile := outputFile
+	originalFullOutput := fullOutput
+	defer func() {
+		outputFile = originalOutputFile
+		fullOutput = originalFullOutput
+		file.Close()
+	}()
+
+	outputFile = file
+	fullOutput = false
+
+	data, err := os.ReadFile(feedPath)
+	if err != nil {
+		t.Fatalf("failed to read feed file: %v", err)
+	}
+
+	feed, err := parseFeed(data)
+	if err != nil {
+		t.Fatalf("failed to parse feed: %v", err)
+	}
+
+	for _, item := range feed.Channel.Items {
+		printItem("file://"+feedPath, &item, feed.Channel.Title)
+	}
+
+	file.Close()
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	if len(lines) != 3 {
+		t.Errorf("expected 3 lines, got %d", len(lines))
+	}
+
+	expectedLines := []string{
+		"15-03-2023 Revolutionary AI model achieves breakthrough performance [Tech News Feed]",
+		"16-03-2023 Critical security patch for popular software [Tech News Feed]",
+		"17-03-2023 [Tech News Feed]",
+	}
+
+	for i, expected := range expectedLines {
+		if i < len(lines) && lines[i] != expected {
+			t.Errorf("line %d: got %q, want %q", i+1, lines[i], expected)
 		}
 	}
 }
