@@ -470,9 +470,13 @@ func processWithOpenAI(content string, topic string) (string, bool) {
 		}
 		return content, true
 	}
-	
-	prompt := fmt.Sprintf("Please do two things with the following text: 1) Compress it into a single paragraph without losing the essence of the content, and 2) Determine if it's relevant to the topic '%s'. Respond with 'RELEVANT:' followed by your compressed text if relevant, or 'NOT_RELEVANT' if not relevant.\n\nText: %s", topic, content)
-	
+
+	if logger != nil {
+		logger.Printf("Processing content with ChatGPT for topic filtering and compression")
+	}
+
+	prompt := fmt.Sprintf("Please do two things with the following text: 1) Compress it into a single paragraph without losing the essence of the content, and 2) Determine if it's relevant to the topic '%s'. IMPORTANT: Keep the same language as the original text - do not translate or change the language. Respond with 'RELEVANT:' followed by your compressed text if relevant, or 'NOT_RELEVANT' if not relevant.\n\nText: %s", topic, content)
+
 	request := OpenAIRequest{
 		Model: "gpt-3.5-turbo",
 		Messages: []Message{
@@ -482,7 +486,7 @@ func processWithOpenAI(content string, topic string) (string, bool) {
 			},
 		},
 	}
-	
+
 	requestBody, err := json.Marshal(request)
 	if err != nil {
 		if logger != nil {
@@ -490,7 +494,7 @@ func processWithOpenAI(content string, topic string) (string, bool) {
 		}
 		return content, true
 	}
-	
+
 	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(requestBody))
 	if err != nil {
 		if logger != nil {
@@ -498,10 +502,10 @@ func processWithOpenAI(content string, topic string) (string, bool) {
 		}
 		return content, true
 	}
-	
+
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	httpClient := &http.Client{}
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -511,14 +515,14 @@ func processWithOpenAI(content string, topic string) (string, bool) {
 		return content, true
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		if logger != nil {
 			logger.Printf("OpenAI API error %d, keeping content", resp.StatusCode)
 		}
 		return content, true
 	}
-	
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		if logger != nil {
@@ -526,7 +530,7 @@ func processWithOpenAI(content string, topic string) (string, bool) {
 		}
 		return content, true
 	}
-	
+
 	var openaiResp OpenAIResponse
 	err = json.Unmarshal(body, &openaiResp)
 	if err != nil {
@@ -535,30 +539,30 @@ func processWithOpenAI(content string, topic string) (string, bool) {
 		}
 		return content, true
 	}
-	
+
 	if len(openaiResp.Choices) == 0 {
 		if logger != nil {
 			logger.Printf("No choices in OpenAI response, keeping content")
 		}
 		return content, true
 	}
-	
+
 	response := openaiResp.Choices[0].Message.Content
 	if strings.HasPrefix(response, "NOT_RELEVANT") {
 		if logger != nil {
-			logger.Printf("Content marked as not relevant to topic '%s', filtering out", topic)
+			logger.Printf("Content marked as not relevant to topic '%s' by ChatGPT, filtering out", topic)
 		}
 		return "", false
 	}
-	
+
 	if strings.HasPrefix(response, "RELEVANT:") {
 		compressed := strings.TrimSpace(strings.TrimPrefix(response, "RELEVANT:"))
 		if logger != nil {
-			logger.Printf("Content compressed from %d to %d characters", len(content), len(compressed))
+			logger.Printf("Content processed and compressed by ChatGPT from %d to %d characters", len(content), len(compressed))
 		}
 		return compressed, true
 	}
-	
+
 	if logger != nil {
 		logger.Printf("Unexpected OpenAI response format, keeping original content")
 	}
@@ -583,12 +587,12 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 			logger.Printf("Successfully extracted %d characters of content from %s", len(webContent), item.Link)
 		}
 	}
-	
+
 	contentToProcess := webContent
 	if contentToProcess == "" && item.Description != "" {
 		contentToProcess = strip(item.Description)
 	}
-	
+
 	shouldPrint := true
 	if focus != "" && contentToProcess != "" {
 		processed, relevant := processWithOpenAI(contentToProcess, focus)
@@ -602,7 +606,7 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 			shouldPrint = false
 		}
 	}
-	
+
 	if !shouldPrint {
 		if logger != nil {
 			logger.Printf("Item filtered out as not relevant to focus topic '%s'", focus)
