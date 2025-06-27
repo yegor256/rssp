@@ -4,6 +4,8 @@
 
 A smart RSS aggregator that helps you stay focused on news that matters. Instead of manually browsing through multiple RSS feeds and filtering irrelevant content, this tool monitors your favorite news sources, uses ChatGPT to intelligently filter and compress articles based on your interests, and outputs only the relevant news to a text file that you can read at your convenience or tail-follow in real-time.
 
+[Claude Code] wrote this code base for me. I didn't touch a single line of code.
+
 Install it from sources:
 
 ```bash
@@ -42,3 +44,4 @@ make clean          # Clean build artifacts
 
 [Diffbot]: https://www.diffbot.com/
 [OpenAI]: https://openai.com/
+[Claude Code]: https://www.anthropic.com/claude-code
