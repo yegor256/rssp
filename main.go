@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"encoding/xml"
 	"flag"
@@ -23,6 +24,9 @@ import (
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
 )
+
+//go:embed prompt.txt
+var embeddedPrompt string
 
 type RSS struct {
 	Channel Channel `xml:"channel"`
@@ -464,11 +468,7 @@ func extractMainText(html string) string {
 }
 
 func buildPrompt(topic string, content string) (string, error) {
-	promptBytes, err := os.ReadFile("prompt.txt")
-	if err != nil {
-		return "", fmt.Errorf("failed to read prompt.txt: %w", err)
-	}
-	tmpl, err := template.New("prompt").Parse(string(promptBytes))
+	tmpl, err := template.New("prompt").Parse(embeddedPrompt)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse prompt template: %w", err)
 	}

@@ -1327,3 +1327,22 @@ func TestPrintItemWithEmptyContent(t *testing.T) {
 		t.Errorf("output should be empty when item has no displayable content, got %d bytes: %q", len(contentStr), contentStr)
 	}
 }
+
+func TestBuildPromptWithEmbeddedTemplate(t *testing.T) {
+	prompt, err := buildPrompt("artificial intelligence", "This is test content about AI and machine learning.")
+	if err != nil {
+		t.Fatalf("buildPrompt returned error: %v", err)
+	}
+	if !strings.Contains(prompt, "artificial intelligence") {
+		t.Error("prompt should contain the topic")
+	}
+	if !strings.Contains(prompt, "This is test content about AI and machine learning.") {
+		t.Error("prompt should contain the content")
+	}
+	if !strings.Contains(prompt, "RELEVANT:") {
+		t.Error("prompt should contain RELEVANT keyword")
+	}
+	if !strings.Contains(prompt, "NOT_RELEVANT") {
+		t.Error("prompt should contain NOT_RELEVANT keyword")
+	}
+}
