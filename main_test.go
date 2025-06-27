@@ -1241,7 +1241,13 @@ func TestIntegrationCompactOutputWithXMLFile(t *testing.T) {
 		t.Fatalf("failed to read output file: %v", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	allLines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	var lines []string
+	for _, line := range allLines {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
 	if len(lines) != 3 {
 		t.Errorf("expected 3 lines, got %d", len(lines))
 	}

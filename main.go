@@ -302,7 +302,7 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 		if item.PubDate != "" {
 			fmt.Fprintf(outputFile, "Published: %s\n", item.PubDate)
 		}
-		fmt.Fprintf(outputFile, "---\n")
+		fmt.Fprintf(outputFile, "---\n\n")
 	} else {
 		date := parseDate(item.PubDate)
 		hasContent := false
@@ -323,7 +323,7 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 			}
 			fmt.Fprintf(outputFile, "[%s]", channelTitle)
 		}
-		fmt.Fprintf(outputFile, "\n")
+		fmt.Fprintf(outputFile, "\n\n")
 	}
 
 	if outputFile != os.Stdout {
