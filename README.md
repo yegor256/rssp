@@ -4,16 +4,6 @@
 
 A smart RSS aggregator that helps you stay focused on news that matters. Instead of manually browsing through multiple RSS feeds and filtering irrelevant content, this tool monitors your favorite news sources, uses ChatGPT to intelligently filter and compress articles based on your interests, and outputs only the relevant news to a text file that you can read at your convenience or tail-follow in real-time.
 
-## Features
-
-* Monitor multiple RSS feeds concurrently
-* Real-time streaming of new items to stdout
-* Automatic deduplication of items
-* Enhanced content extraction via [Diffbot] API
-* OpenAI-powered content filtering and compression
-* Simple command-line interface
-* Lightweight and efficient
-
 Install it from sources:
 
 ```bash
