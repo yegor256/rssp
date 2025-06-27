@@ -51,12 +51,12 @@ type HTTPClient interface {
 }
 
 var (
-	client HTTPClient = http.DefaultClient
-	outputFile *os.File
+	client      HTTPClient = http.DefaultClient
+	outputFile  *os.File
 	outputMutex sync.Mutex
-	logger *log.Logger
-	fullOutput bool
-	authored bool
+	logger      *log.Logger
+	fullOutput  bool
+	authored    bool
 )
 
 func main() {
@@ -295,6 +295,84 @@ func strip(text string) string {
 	return strings.TrimSpace(re.ReplaceAllString(text, ""))
 }
 
+func extractContent(link string, httpClient HTTPClient) string {
+	if httpClient == nil {
+		httpClient = client
+	}
+
+	resp, err := httpClient.Get(link)
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to fetch %s: %v", link, err)
+		}
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		if logger != nil {
+			logger.Printf("Non-OK status code %d for %s", resp.StatusCode, link)
+		}
+		return ""
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to read response body from %s: %v", link, err)
+		}
+		return ""
+	}
+
+	return extractMainText(string(body))
+}
+
+func extractMainText(html string) string {
+	scriptRe := regexp.MustCompile(`(?s)<script[^>]*>.*?</script>`)
+	html = scriptRe.ReplaceAllString(html, "")
+
+	styleRe := regexp.MustCompile(`(?s)<style[^>]*>.*?</style>`)
+	html = styleRe.ReplaceAllString(html, "")
+
+	navRe := regexp.MustCompile(`(?s)<nav[^>]*>.*?</nav>`)
+	html = navRe.ReplaceAllString(html, "")
+
+	footerRe := regexp.MustCompile(`(?s)<footer[^>]*>.*?</footer>`)
+	html = footerRe.ReplaceAllString(html, "")
+
+	headerRe := regexp.MustCompile(`(?s)<header[^>]*>.*?</header>`)
+	html = headerRe.ReplaceAllString(html, "")
+
+	articleRe := regexp.MustCompile(`(?s)<article[^>]*>(.*?)</article>`)
+	articleMatches := articleRe.FindAllStringSubmatch(html, -1)
+	if len(articleMatches) > 0 {
+		html = ""
+		for _, match := range articleMatches {
+			html += match[1] + " "
+		}
+	} else {
+		mainRe := regexp.MustCompile(`(?s)<main[^>]*>(.*?)</main>`)
+		mainMatch := mainRe.FindStringSubmatch(html)
+		if len(mainMatch) > 1 {
+			html = mainMatch[1]
+		}
+	}
+
+	tagRe := regexp.MustCompile(`<[^>]*>`)
+	text := tagRe.ReplaceAllString(html, " ")
+
+	spaceRe := regexp.MustCompile(`\s+`)
+	text = spaceRe.ReplaceAllString(text, " ")
+
+	text = strings.TrimSpace(text)
+
+	if len(text) > 1000 {
+		text = text[:1000] + "..."
+	}
+
+	return text
+}
+
 func printItem(feedURL string, item *Item, channelTitle string) {
 	outputMutex.Lock()
 	defer outputMutex.Unlock()
@@ -302,12 +380,27 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 	if logger != nil {
 		logger.Printf("Writing item to output: '%s' (ID: %s)", item.Title, getItemID(item))
 	}
+
+	webContent := ""
+	if item.Link != "" {
+		if logger != nil {
+			logger.Printf("Fetching web content from: %s", item.Link)
+		}
+		webContent = extractContent(item.Link, client)
+		if webContent != "" && logger != nil {
+			logger.Printf("Successfully extracted %d characters of content from %s", len(webContent), item.Link)
+		}
+	}
+
 	if fullOutput {
 		fmt.Fprintf(outputFile, "\n[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), feedURL)
 		fmt.Fprintf(outputFile, "Title: %s\n", strip(item.Title))
 		fmt.Fprintf(outputFile, "Link: %s\n", item.Link)
 		if item.Description != "" {
 			fmt.Fprintf(outputFile, "Description: %s\n", strip(item.Description))
+		}
+		if webContent != "" {
+			fmt.Fprintf(outputFile, "Content: %s\n", webContent)
 		}
 		if item.PubDate != "" {
 			fmt.Fprintf(outputFile, "Published: %s\n", item.PubDate)
@@ -325,6 +418,13 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 				fmt.Fprintf(outputFile, " ")
 			}
 			fmt.Fprintf(outputFile, "%s", strip(item.Description))
+			hasContent = true
+		}
+		if webContent != "" {
+			if hasContent {
+				fmt.Fprintf(outputFile, " ")
+			}
+			fmt.Fprintf(outputFile, "%s", webContent)
 			hasContent = true
 		}
 		if authored && channelTitle != "" {

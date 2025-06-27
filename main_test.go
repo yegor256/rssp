@@ -1339,3 +1339,94 @@ func TestStripHandlesNonASCIIContent(t *testing.T) {
 		t.Errorf("strip failed with non-ASCII content: got %q, want %q", result, expected)
 	}
 }
+
+func TestExtractMainTextRemovesScripts(t *testing.T) {
+	html := `<html><body><p>Content</p><script>alert('test');</script></body></html>`
+	expected := "Content"
+	result := extractMainText(html)
+	if result != expected {
+		t.Errorf("extractMainText failed to remove scripts: got %q, want %q", result, expected)
+	}
+}
+
+func TestExtractMainTextRemovesStyles(t *testing.T) {
+	html := `<html><head><style>body { color: red; }</style></head><body><p>Text</p></body></html>`
+	expected := "Text"
+	result := extractMainText(html)
+	if result != expected {
+		t.Errorf("extractMainText failed to remove styles: got %q, want %q", result, expected)
+	}
+}
+
+func TestExtractMainTextExtractsArticleContent(t *testing.T) {
+	html := `<html><body><nav>Navigation</nav><article>Article content here</article><footer>Footer</footer></body></html>`
+	expected := "Article content here"
+	result := extractMainText(html)
+	if result != expected {
+		t.Errorf("extractMainText failed to extract article: got %q, want %q", result, expected)
+	}
+}
+
+func TestExtractMainTextExtractsMainContent(t *testing.T) {
+	html := `<html><body><header>Header</header><main>Main content</main><footer>Footer</footer></body></html>`
+	expected := "Main content"
+	result := extractMainText(html)
+	if result != expected {
+		t.Errorf("extractMainText failed to extract main: got %q, want %q", result, expected)
+	}
+}
+
+func TestExtractMainTextTruncatesLongContent(t *testing.T) {
+	longText := strings.Repeat("a", 1100)
+	html := fmt.Sprintf(`<html><body><p>%s</p></body></html>`, longText)
+	result := extractMainText(html)
+	if len(result) != 1003 {
+		t.Errorf("extractMainText failed to truncate: got length %d, want 1003", len(result))
+	}
+	if !strings.HasSuffix(result, "...") {
+		t.Errorf("extractMainText truncated text should end with '...': got %q", result[len(result)-5:])
+	}
+}
+
+func TestExtractContentWithSuccessfulFetch(t *testing.T) {
+	mockClient := &mockHTTPClient{
+		responses: map[string]*http.Response{
+			"https://example.com/article": {
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`<html><body><article>Test article content</article></body></html>`)),
+			},
+		},
+	}
+	result := extractContent("https://example.com/article", mockClient)
+	expected := "Test article content"
+	if result != expected {
+		t.Errorf("extractContent failed: got %q, want %q", result, expected)
+	}
+}
+
+func TestExtractContentWithHTTPError(t *testing.T) {
+	mockClient := &mockHTTPClient{
+		responses: map[string]*http.Response{
+			"https://example.com/error": {
+				StatusCode: http.StatusNotFound,
+				Body:       io.NopCloser(strings.NewReader("")),
+			},
+		},
+	}
+	result := extractContent("https://example.com/error", mockClient)
+	if result != "" {
+		t.Errorf("extractContent should return empty string on HTTP error: got %q", result)
+	}
+}
+
+func TestExtractContentWithNetworkError(t *testing.T) {
+	mockClient := &mockHTTPClient{
+		errors: map[string]error{
+			"https://example.com/network-error": errors.New("network error"),
+		},
+	}
+	result := extractContent("https://example.com/network-error", mockClient)
+	if result != "" {
+		t.Errorf("extractContent should return empty string on network error: got %q", result)
+	}
+}
