@@ -4,11 +4,13 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -1344,5 +1346,27 @@ func TestBuildPromptWithEmbeddedTemplate(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "NOT_RELEVANT") {
 		t.Error("prompt should contain NOT_RELEVANT keyword")
+	}
+}
+
+func TestMainVersionFlag(t *testing.T) {
+	if os.Getenv("BE_RSSP") == "1" {
+		oldArgs := os.Args
+		os.Args = []string{"rssp", "--version"}
+		defer func() { os.Args = oldArgs }()
+		main()
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestMainVersionFlag")
+	cmd.Env = append(os.Environ(), "BE_RSSP=1")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		exitErr, ok := err.(*exec.ExitError)
+		if !ok || exitErr.ExitCode() != 0 {
+			t.Fatalf("process failed with unexpected error: %v, output: %s", err, output)
+		}
+	}
+	if !bytes.Contains(output, []byte("0.0.0")) {
+		t.Errorf("expected output to contain '0.0.0', got: %s", output)
 	}
 }

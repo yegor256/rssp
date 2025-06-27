@@ -102,13 +102,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: Embedded prompt template is empty. The binary was not built correctly.\n")
 		os.Exit(1)
 	}
-	
+
 	_, err := template.New("prompt").Parse(embeddedPrompt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: Failed to parse embedded prompt template: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "RSS Stream Processor (rssp)\n\n")
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] uri1 uri2 ...\n\n", os.Args[0])
@@ -123,6 +123,7 @@ func main() {
 	}
 
 	help := flag.Bool("help", false, "Show help message")
+	version := flag.Bool("version", false, "Show version information")
 	output := flag.String("output", "", "Output file for RSS items (default: stdout)")
 	full := flag.Bool("full", false, "Show full item details (title, link, description, date)")
 	auth := flag.Bool("authored", false, "Include channel name in output")
@@ -132,6 +133,11 @@ func main() {
 
 	if *help {
 		flag.Usage()
+		os.Exit(0)
+	}
+
+	if *version {
+		fmt.Println("0.0.0")
 		os.Exit(0)
 	}
 
