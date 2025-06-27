@@ -569,6 +569,14 @@ func processWithOpenAI(content string, topic string) (string, bool) {
 	return content, true
 }
 
+func hostname(feedURL string) string {
+	u, err := url.Parse(feedURL)
+	if err != nil {
+		return feedURL
+	}
+	return u.Host
+}
+
 func printItem(feedURL string, item *Item, channelTitle string) {
 	outputMutex.Lock()
 	defer outputMutex.Unlock()
@@ -663,7 +671,11 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 			if hasContent {
 				fmt.Fprintf(outputFile, " ")
 			}
-			fmt.Fprintf(outputFile, "[%s]", channelTitle)
+			displayName := channelTitle
+			if strings.Count(channelTitle, " ") > 2 {
+				displayName = hostname(feedURL)
+			}
+			fmt.Fprintf(outputFile, "[%s]", displayName)
 			hasContent = true
 		}
 		if hasContent {
