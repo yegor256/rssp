@@ -90,7 +90,7 @@ func main() {
 	output := flag.String("output", "", "Output file for RSS items (default: stdout)")
 	full := flag.Bool("full", false, "Show full item details (title, link, description, date)")
 	auth := flag.Bool("authored", false, "Include channel name in output")
-	maxLen := flag.Int("max-length", 2000, "Maximum length of article text to extract")
+	maxLen := flag.Int("max-length", 10000, "Maximum length of article text to extract")
 	flag.Parse()
 
 	if *help {
@@ -364,7 +364,7 @@ func extractContent(link string, httpClient HTTPClient) string {
 		text = text[:maxLength] + "..."
 	}
 	if logger != nil {
-		logger.Printf("Successfully extracted %d characters via Diffbot from %s", len(text), link)
+		logger.Printf("Successfully extracted %d characters via Diffbot API from %s", len(text), link)
 	}
 	return text
 }
