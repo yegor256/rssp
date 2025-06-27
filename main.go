@@ -5,12 +5,14 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -50,6 +52,17 @@ type HTTPClient interface {
 	Get(url string) (*http.Response, error)
 }
 
+type DiffbotResponse struct {
+	Objects []DiffbotArticle `json:"objects"`
+}
+
+type DiffbotArticle struct {
+	Title string `json:"title"`
+	Text  string `json:"text"`
+	HTML  string `json:"html"`
+	Date  string `json:"date"`
+}
+
 var (
 	client      HTTPClient = http.DefaultClient
 	outputFile  *os.File
@@ -57,6 +70,7 @@ var (
 	logger      *log.Logger
 	fullOutput  bool
 	authored    bool
+	maxLength   int
 )
 
 func main() {
@@ -76,6 +90,7 @@ func main() {
 	output := flag.String("output", "", "Output file for RSS items (default: stdout)")
 	full := flag.Bool("full", false, "Show full item details (title, link, description, date)")
 	auth := flag.Bool("authored", false, "Include channel name in output")
+	maxLen := flag.Int("max-length", 2000, "Maximum length of article text to extract")
 	flag.Parse()
 
 	if *help {
@@ -105,6 +120,7 @@ func main() {
 
 	fullOutput = *full
 	authored = *auth
+	maxLength = *maxLen
 
 	states := make([]*FeedState, len(uris))
 	for i, uri := range uris {
@@ -299,7 +315,61 @@ func extractContent(link string, httpClient HTTPClient) string {
 	if httpClient == nil {
 		httpClient = client
 	}
+	token := os.Getenv("DIFFBOT_TOKEN")
+	if token == "" {
+		if logger != nil {
+			logger.Printf("DIFFBOT_TOKEN not set, falling back to basic extraction for %s", link)
+		}
+		return extractBasicContent(link, httpClient)
+	}
+	diffbotURL := fmt.Sprintf("https://api.diffbot.com/v3/article?token=%s&url=%s", token, url.QueryEscape(link))
+	resp, err := httpClient.Get(diffbotURL)
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to fetch from Diffbot for %s: %v", link, err)
+		}
+		return extractBasicContent(link, httpClient)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		if logger != nil {
+			logger.Printf("Diffbot API error %d for %s, falling back to basic extraction", resp.StatusCode, link)
+		}
+		return extractBasicContent(link, httpClient)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to read Diffbot response for %s: %v", link, err)
+		}
+		return extractBasicContent(link, httpClient)
+	}
+	var diffbotResp DiffbotResponse
+	err = json.Unmarshal(body, &diffbotResp)
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to parse Diffbot response for %s: %v", link, err)
+		}
+		return extractBasicContent(link, httpClient)
+	}
+	if len(diffbotResp.Objects) == 0 {
+		if logger != nil {
+			logger.Printf("No objects in Diffbot response for %s, falling back to basic extraction", link)
+		}
+		return extractBasicContent(link, httpClient)
+	}
+	article := diffbotResp.Objects[0]
+	text := article.Text
+	if len(text) > maxLength {
+		text = text[:maxLength] + "..."
+	}
+	if logger != nil {
+		logger.Printf("Successfully extracted %d characters via Diffbot from %s", len(text), link)
+	}
+	return text
+}
 
+func extractBasicContent(link string, httpClient HTTPClient) string {
 	resp, err := httpClient.Get(link)
 	if err != nil {
 		if logger != nil {
@@ -308,14 +378,12 @@ func extractContent(link string, httpClient HTTPClient) string {
 		return ""
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		if logger != nil {
 			logger.Printf("Non-OK status code %d for %s", resp.StatusCode, link)
 		}
 		return ""
 	}
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		if logger != nil {
@@ -323,7 +391,6 @@ func extractContent(link string, httpClient HTTPClient) string {
 		}
 		return ""
 	}
-
 	return extractMainText(string(body))
 }
 
@@ -366,8 +433,8 @@ func extractMainText(html string) string {
 
 	text = strings.TrimSpace(text)
 
-	if len(text) > 1000 {
-		text = text[:1000] + "..."
+	if len(text) > maxLength {
+		text = text[:maxLength] + "..."
 	}
 
 	return text

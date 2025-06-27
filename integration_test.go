@@ -241,6 +241,10 @@ func TestIntegrationCompactOutputWithXMLFile(t *testing.T) {
 }
 
 func TestExtractContentWithSuccessfulFetch(t *testing.T) {
+	originalMaxLength := maxLength
+	maxLength = 2000
+	defer func() { maxLength = originalMaxLength }()
+	os.Unsetenv("DIFFBOT_TOKEN")
 	mockClient := &mockHTTPClient{
 		responses: map[string]*http.Response{
 			"https://example.com/article": {

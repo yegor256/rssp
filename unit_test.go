@@ -6,6 +6,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1113,6 +1114,9 @@ func TestStripHandlesNonASCIIContent(t *testing.T) {
 }
 
 func TestExtractMainTextRemovesScripts(t *testing.T) {
+	originalMaxLength := maxLength
+	maxLength = 2000
+	defer func() { maxLength = originalMaxLength }()
 	html := `<html><body><p>Content</p><script>alert('test');</script></body></html>`
 	expected := "Content"
 	result := extractMainText(html)
@@ -1122,6 +1126,9 @@ func TestExtractMainTextRemovesScripts(t *testing.T) {
 }
 
 func TestExtractMainTextRemovesStyles(t *testing.T) {
+	originalMaxLength := maxLength
+	maxLength = 2000
+	defer func() { maxLength = originalMaxLength }()
 	html := `<html><head><style>body { color: red; }</style></head><body><p>Text</p></body></html>`
 	expected := "Text"
 	result := extractMainText(html)
@@ -1131,6 +1138,9 @@ func TestExtractMainTextRemovesStyles(t *testing.T) {
 }
 
 func TestExtractMainTextExtractsArticleContent(t *testing.T) {
+	originalMaxLength := maxLength
+	maxLength = 2000
+	defer func() { maxLength = originalMaxLength }()
 	html := `<html><body><nav>Navigation</nav><article>Article content here</article><footer>Footer</footer></body></html>`
 	expected := "Article content here"
 	result := extractMainText(html)
@@ -1140,6 +1150,9 @@ func TestExtractMainTextExtractsArticleContent(t *testing.T) {
 }
 
 func TestExtractMainTextExtractsMainContent(t *testing.T) {
+	originalMaxLength := maxLength
+	maxLength = 2000
+	defer func() { maxLength = originalMaxLength }()
 	html := `<html><body><header>Header</header><main>Main content</main><footer>Footer</footer></body></html>`
 	expected := "Main content"
 	result := extractMainText(html)
@@ -1149,6 +1162,9 @@ func TestExtractMainTextExtractsMainContent(t *testing.T) {
 }
 
 func TestExtractMainTextTruncatesLongContent(t *testing.T) {
+	originalMaxLength := maxLength
+	maxLength = 1000
+	defer func() { maxLength = originalMaxLength }()
 	longText := strings.Repeat("a", 1100)
 	html := fmt.Sprintf(`<html><body><p>%s</p></body></html>`, longText)
 	result := extractMainText(html)
@@ -1157,6 +1173,116 @@ func TestExtractMainTextTruncatesLongContent(t *testing.T) {
 	}
 	if !strings.HasSuffix(result, "...") {
 		t.Errorf("extractMainText truncated text should end with '...': got %q", result[len(result)-5:])
+	}
+}
+
+func TestExtractContentWithDiffbotToken(t *testing.T) {
+	originalMaxLength := maxLength
+	maxLength = 2000
+	defer func() { maxLength = originalMaxLength }()
+	os.Setenv("DIFFBOT_TOKEN", "test-token")
+	defer os.Unsetenv("DIFFBOT_TOKEN")
+	mockClient := &mockHTTPClient{
+		responses: map[string]*http.Response{
+			"https://api.diffbot.com/v3/article?token=test-token&url=https%3A%2F%2Fexample.com%2Farticle": {
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader(`{"objects":[{"title":"Test Article","text":"This is extracted content from Diffbot."}]}`)),
+			},
+		},
+	}
+	result := extractContent("https://example.com/article", mockClient)
+	if result != "This is extracted content from Diffbot." {
+		t.Errorf("expected Diffbot content, got %q", result)
+	}
+}
+
+func TestExtractContentWithoutDiffbotToken(t *testing.T) {
+	originalMaxLength := maxLength
+	maxLength = 2000
+	defer func() { maxLength = originalMaxLength }()
+	os.Unsetenv("DIFFBOT_TOKEN")
+	mockClient := &mockHTTPClient{
+		responses: map[string]*http.Response{
+			"https://example.com/article": {
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader("<html><body><p>Basic content</p></body></html>")),
+			},
+		},
+	}
+	result := extractContent("https://example.com/article", mockClient)
+	if result != "Basic content" {
+		t.Errorf("expected basic content, got %q", result)
+	}
+}
+
+func TestExtractContentDiffbotFallback(t *testing.T) {
+	originalMaxLength := maxLength
+	maxLength = 2000
+	defer func() { maxLength = originalMaxLength }()
+	os.Setenv("DIFFBOT_TOKEN", "test-token")
+	defer os.Unsetenv("DIFFBOT_TOKEN")
+	mockClient := &mockHTTPClient{
+		responses: map[string]*http.Response{
+			"https://example.com/article": {
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader("<html><body><p>Fallback content</p></body></html>")),
+			},
+		},
+		errors: map[string]error{
+			"https://api.diffbot.com/v3/article?token=test-token&url=https%3A%2F%2Fexample.com%2Farticle": errors.New("API error"),
+		},
+	}
+	result := extractContent("https://example.com/article", mockClient)
+	if result != "Fallback content" {
+		t.Errorf("expected fallback content, got %q", result)
+	}
+}
+
+func TestExtractContentDiffbotEmptyResponse(t *testing.T) {
+	originalMaxLength := maxLength
+	maxLength = 2000
+	defer func() { maxLength = originalMaxLength }()
+	os.Setenv("DIFFBOT_TOKEN", "test-token")
+	defer os.Unsetenv("DIFFBOT_TOKEN")
+	mockClient := &mockHTTPClient{
+		responses: map[string]*http.Response{
+			"https://api.diffbot.com/v3/article?token=test-token&url=https%3A%2F%2Fexample.com%2Farticle": {
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader(`{"objects":[]}`)),
+			},
+			"https://example.com/article": {
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader("<html><body><p>Fallback content</p></body></html>")),
+			},
+		},
+	}
+	result := extractContent("https://example.com/article", mockClient)
+	if result != "Fallback content" {
+		t.Errorf("expected fallback for empty response, got %q", result)
+	}
+}
+
+func TestExtractContentDiffbotTruncation(t *testing.T) {
+	os.Setenv("DIFFBOT_TOKEN", "test-token")
+	defer os.Unsetenv("DIFFBOT_TOKEN")
+	originalMaxLength := maxLength
+	maxLength = 1000
+	defer func() { maxLength = originalMaxLength }()
+	longText := strings.Repeat("a", 1100)
+	mockClient := &mockHTTPClient{
+		responses: map[string]*http.Response{
+			"https://api.diffbot.com/v3/article?token=test-token&url=https%3A%2F%2Fexample.com%2Farticle": {
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader(fmt.Sprintf(`{"objects":[{"text":"%s"}]}`, longText))),
+			},
+		},
+	}
+	result := extractContent("https://example.com/article", mockClient)
+	if len(result) != 1003 {
+		t.Errorf("expected truncated content length 1003, got %d", len(result))
+	}
+	if !strings.HasSuffix(result, "...") {
+		t.Error("expected truncated content to end with '...'")
 	}
 }
 
