@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"golang.org/x/text/encoding/charmap"
@@ -462,6 +463,30 @@ func extractMainText(html string) string {
 	return text
 }
 
+func buildPrompt(topic string, content string) (string, error) {
+	promptBytes, err := os.ReadFile("prompt.txt")
+	if err != nil {
+		return "", fmt.Errorf("failed to read prompt.txt: %w", err)
+	}
+	tmpl, err := template.New("prompt").Parse(string(promptBytes))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse prompt template: %w", err)
+	}
+	data := struct {
+		Topic   string
+		Content string
+	}{
+		Topic:   topic,
+		Content: content,
+	}
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, data)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute prompt template: %w", err)
+	}
+	return buf.String(), nil
+}
+
 func processWithOpenAI(content string, topic string) (string, bool) {
 	token := os.Getenv("OPENAI_API_KEY")
 	if token == "" {
@@ -475,7 +500,13 @@ func processWithOpenAI(content string, topic string) (string, bool) {
 		logger.Printf("Processing content with ChatGPT for topic filtering and compression")
 	}
 
-	prompt := fmt.Sprintf("Please do two things with the following text: 1) Compress it into a single paragraph without losing the essence of the content, and 2) Determine if it's relevant to the topic '%s'. IMPORTANT: Keep the same language as the original text - do not translate or change the language. Respond with 'RELEVANT:' followed by your compressed text if relevant, or 'NOT_RELEVANT' if not relevant.\n\nText: %s", topic, content)
+	prompt, err := buildPrompt(topic, content)
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to build prompt: %v", err)
+		}
+		return content, true
+	}
 
 	request := OpenAIRequest{
 		Model: "gpt-3.5-turbo",
