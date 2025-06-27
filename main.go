@@ -98,6 +98,17 @@ var (
 )
 
 func main() {
+	if embeddedPrompt == "" {
+		fmt.Fprintf(os.Stderr, "Error: Embedded prompt template is empty. The binary was not built correctly.\n")
+		os.Exit(1)
+	}
+	
+	_, err := template.New("prompt").Parse(embeddedPrompt)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Failed to parse embedded prompt template: %v\n", err)
+		os.Exit(1)
+	}
+	
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "RSS Stream Processor (rssp)\n\n")
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] uri1 uri2 ...\n\n", os.Args[0])
