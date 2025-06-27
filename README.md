@@ -18,8 +18,8 @@ Then, monitor a single RSS feed and save output to a file:
 rssp --output feed.txt https://example.com/rss.xml
 ```
 
-It is advised to define `DIFFBOT_TOKEN` and `OPENAI_API_KEY` environment
-variables.
+It is advised to define `DIFFBOT_TOKEN` (from [Diffbot])
+and `OPENAI_API_KEY` (from [OpenAI]) environment variables.
 
 ## How It Works
 
@@ -41,3 +41,4 @@ make clean          # Clean build artifacts
 ```
 
 [Diffbot]: https://www.diffbot.com/
+[OpenAI]: https://openai.com/
