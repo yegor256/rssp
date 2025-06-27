@@ -55,6 +55,7 @@ var (
 	outputMutex sync.Mutex
 	logger *log.Logger
 	fullOutput bool
+	authored bool
 )
 
 func main() {
@@ -67,11 +68,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  %s https://example.com/rss.xml https://another.com/feed.xml\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --output feed.txt https://example.com/rss.xml\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --full https://example.com/rss.xml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --authored https://example.com/rss.xml\n", os.Args[0])
 	}
 
 	help := flag.Bool("help", false, "Show help message")
 	output := flag.String("output", "", "Output file for RSS items (default: stdout)")
 	full := flag.Bool("full", false, "Show full item details (title, link, description, date)")
+	auth := flag.Bool("authored", false, "Include channel name in output")
 	flag.Parse()
 
 	if *help {
@@ -100,6 +103,7 @@ func main() {
 	}
 
 	fullOutput = *full
+	authored = *auth
 
 	states := make([]*FeedState, len(uris))
 	for i, uri := range uris {
@@ -317,7 +321,7 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 			fmt.Fprintf(outputFile, "%s", item.Description)
 			hasContent = true
 		}
-		if channelTitle != "" {
+		if authored && channelTitle != "" {
 			if hasContent {
 				fmt.Fprintf(outputFile, " ")
 			}

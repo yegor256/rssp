@@ -753,14 +753,17 @@ func TestPrintItemCompactOutput(t *testing.T) {
 
 	originalOutputFile := outputFile
 	originalFullOutput := fullOutput
+	originalAuthored := authored
 	defer func() {
 		outputFile = originalOutputFile
 		fullOutput = originalFullOutput
+		authored = originalAuthored
 		file.Close()
 	}()
 
 	outputFile = file
 	fullOutput = false
+	authored = true
 
 	item := &Item{
 		Title:       "Test Item",
@@ -867,14 +870,17 @@ func TestPrintItemCompactOutputNoDescription(t *testing.T) {
 
 	originalOutputFile := outputFile
 	originalFullOutput := fullOutput
+	originalAuthored := authored
 	defer func() {
 		outputFile = originalOutputFile
 		fullOutput = originalFullOutput
+		authored = originalAuthored
 		file.Close()
 	}()
 
 	outputFile = file
 	fullOutput = false
+	authored = true
 
 	item := &Item{
 		Title:   "Test Item",
@@ -918,14 +924,17 @@ func TestPrintItemCompactOutputNoDate(t *testing.T) {
 
 	originalOutputFile := outputFile
 	originalFullOutput := fullOutput
+	originalAuthored := authored
 	defer func() {
 		outputFile = originalOutputFile
 		fullOutput = originalFullOutput
+		authored = originalAuthored
 		file.Close()
 	}()
 
 	outputFile = file
 	fullOutput = false
+	authored = true
 
 	item := &Item{
 		Title:       "Test Item",
@@ -1211,14 +1220,17 @@ func TestIntegrationCompactOutputWithXMLFile(t *testing.T) {
 
 	originalOutputFile := outputFile
 	originalFullOutput := fullOutput
+	originalAuthored := authored
 	defer func() {
 		outputFile = originalOutputFile
 		fullOutput = originalFullOutput
+		authored = originalAuthored
 		file.Close()
 	}()
 
 	outputFile = file
 	fullOutput = false
+	authored = true
 
 	data, err := os.ReadFile(feedPath)
 	if err != nil {
