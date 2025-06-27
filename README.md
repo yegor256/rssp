@@ -1,5 +1,7 @@
 # RSS Stream Processor
 
+[![CI](https://github.com/yegor256/rssp/actions/workflows/ci.yml/badge.svg)](https://github.com/yegor256/rssp/actions/workflows/ci.yml)
+
 A smart RSS aggregator that helps you stay focused on news that matters. Instead of manually browsing through multiple RSS feeds and filtering irrelevant content, this tool monitors your favorite news sources, uses ChatGPT to intelligently filter and compress articles based on your interests, and outputs only the relevant news to a text file that you can read at your convenience or tail-follow in real-time.
 
 ## Features
