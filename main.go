@@ -588,20 +588,24 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 		}
 	}
 
-	contentToProcess := webContent
-	if contentToProcess == "" && item.Description != "" {
+	contentToProcess := ""
+	if item.Description != "" {
 		contentToProcess = strip(item.Description)
 	}
+	if webContent != "" {
+		if contentToProcess != "" {
+			contentToProcess += "\n\n" + webContent
+		} else {
+			contentToProcess = webContent
+		}
+	}
 
+	processedContent := ""
 	shouldPrint := true
 	if focus != "" && contentToProcess != "" {
 		processed, relevant := processWithOpenAI(contentToProcess, focus)
 		if relevant {
-			if webContent != "" {
-				webContent = processed
-			} else if item.Description != "" {
-				item.Description = processed
-			}
+			processedContent = processed
 		} else {
 			shouldPrint = false
 		}
@@ -618,10 +622,11 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 		fmt.Fprintf(outputFile, "\n[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), feedURL)
 		fmt.Fprintf(outputFile, "Title: %s\n", strip(item.Title))
 		fmt.Fprintf(outputFile, "Link: %s\n", item.Link)
-		if item.Description != "" {
+		if processedContent != "" {
+			fmt.Fprintf(outputFile, "Content: %s\n", processedContent)
+		} else if item.Description != "" {
 			fmt.Fprintf(outputFile, "Description: %s\n", strip(item.Description))
-		}
-		if webContent != "" {
+		} else if webContent != "" {
 			fmt.Fprintf(outputFile, "Content: %s\n", webContent)
 		}
 		if item.PubDate != "" {
@@ -635,14 +640,19 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 			fmt.Fprintf(outputFile, "%s", date)
 			hasContent = true
 		}
-		if item.Description != "" {
+		if processedContent != "" {
+			if hasContent {
+				fmt.Fprintf(outputFile, " ")
+			}
+			fmt.Fprintf(outputFile, "%s", processedContent)
+			hasContent = true
+		} else if item.Description != "" {
 			if hasContent {
 				fmt.Fprintf(outputFile, " ")
 			}
 			fmt.Fprintf(outputFile, "%s", strip(item.Description))
 			hasContent = true
-		}
-		if webContent != "" {
+		} else if webContent != "" {
 			if hasContent {
 				fmt.Fprintf(outputFile, " ")
 			}
