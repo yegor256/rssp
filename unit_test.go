@@ -1349,6 +1349,85 @@ func TestBuildPromptWithEmbeddedTemplate(t *testing.T) {
 	}
 }
 
+func TestGenerateDatedFilenameAddsCurrentDateToFilename(t *testing.T) {
+	filename := "news.txt"
+	result := generateDatedFilename(filename)
+	if !strings.HasPrefix(result, "news-") {
+		t.Errorf("result should start with 'news-', got: %s", result)
+	}
+	if !strings.HasSuffix(result, ".txt") {
+		t.Errorf("result should end with '.txt', got: %s", result)
+	}
+	if !strings.Contains(result, "-202") {
+		t.Errorf("result should contain year starting with 202, got: %s", result)
+	}
+}
+
+func TestGenerateDatedFilenameHandlesFilenameWithoutExtension(t *testing.T) {
+	filename := "output"
+	result := generateDatedFilename(filename)
+	if !strings.HasPrefix(result, "output-") {
+		t.Errorf("result should start with 'output-', got: %s", result)
+	}
+	if strings.Contains(result, ".") {
+		t.Errorf("result should not contain extension when none provided, got: %s", result)
+	}
+}
+
+func TestGenerateDatedFilenameHandlesComplexPath(t *testing.T) {
+	filename := "/path/to/data.json"
+	result := generateDatedFilename(filename)
+	if !strings.HasPrefix(result, "/path/to/data-") {
+		t.Errorf("result should start with '/path/to/data-', got: %s", result)
+	}
+	if !strings.HasSuffix(result, ".json") {
+		t.Errorf("result should end with '.json', got: %s", result)
+	}
+}
+
+func TestPrintItemCreatesDatedFileWhenDatedOptionEnabled(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "test.txt")
+	
+	outputMutex = sync.Mutex{}
+	datedOutput = true
+	baseOutput = testFile
+	outputFile = os.Stdout
+	
+	item := &Item{
+		Title:       "Test Title",
+		Link:        "http://example.com",
+		Description: "Test description",
+		PubDate:     "Mon, 02 Jan 2006 15:04:05 -0700",
+	}
+	
+	client = &mockHTTPClient{
+		responses: map[string]*http.Response{
+			"http://example.com": {
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader("<html><body>Test content</body></html>")),
+			},
+		},
+	}
+	
+	printItem("http://feed.example.com", item, "Test Channel")
+	
+	expectedFilename := generateDatedFilename(testFile)
+	if _, err := os.Stat(expectedFilename); os.IsNotExist(err) {
+		t.Errorf("dated file %s was not created", expectedFilename)
+	}
+	
+	content, err := os.ReadFile(expectedFilename)
+	if err != nil {
+		t.Fatalf("failed to read dated file: %v", err)
+	}
+	
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "Test description") {
+		t.Errorf("dated file should contain item description, got: %s", contentStr)
+	}
+}
+
 func TestMainVersionFlag(t *testing.T) {
 	if os.Getenv("BE_RSSP") == "1" {
 		oldArgs := os.Args

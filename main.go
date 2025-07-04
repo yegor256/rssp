@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -95,6 +96,8 @@ var (
 	authored    bool
 	maxLength   int
 	focus       string
+	datedOutput bool
+	baseOutput  string
 )
 
 func main() {
@@ -125,6 +128,7 @@ func main() {
 	help := flag.Bool("help", false, "Show help message")
 	version := flag.Bool("version", false, "Show version information")
 	output := flag.String("output", "", "Output file for RSS items (default: stdout)")
+	dated := flag.Bool("dated", false, "Add current date suffix to output filename (e.g., news.txt -> news-2025-06-24.txt)")
 	full := flag.Bool("full", false, "Show full item details (title, link, description, date)")
 	auth := flag.Bool("authored", false, "Include channel name in output")
 	maxLen := flag.Int("max-length", 10000, "Maximum length of article text to extract")
@@ -148,15 +152,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	datedOutput = *dated
+	baseOutput = *output
+	
 	if *output != "" {
+		filename := *output
+		if datedOutput {
+			filename = generateDatedFilename(*output)
+		}
 		var err error
-		outputFile, err = os.OpenFile(*output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		outputFile, err = os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error opening output file: %v\n", err)
 			os.Exit(1)
 		}
 		defer outputFile.Close()
-		fmt.Printf("Output will be written to: %s\n", *output)
+		fmt.Printf("Output will be written to: %s\n", filename)
 	} else {
 		outputFile = os.Stdout
 	}
@@ -617,6 +628,13 @@ func processWithOpenAI(content string, topic string) (string, bool) {
 	return content, true
 }
 
+func generateDatedFilename(baseFilename string) string {
+	currentDate := time.Now().Format("2006-01-02")
+	ext := filepath.Ext(baseFilename)
+	nameWithoutExt := strings.TrimSuffix(baseFilename, ext)
+	return fmt.Sprintf("%s-%s%s", nameWithoutExt, currentDate, ext)
+}
+
 func hostname(feedURL string) string {
 	u, err := url.Parse(feedURL)
 	if err != nil {
@@ -631,6 +649,21 @@ func printItem(feedURL string, item *Item, channelTitle string) {
 
 	if logger != nil {
 		logger.Printf("Writing item to output: '%s' (ID: %s)", item.Title, getItemID(item))
+	}
+	
+	if datedOutput && baseOutput != "" {
+		newFilename := generateDatedFilename(baseOutput)
+		if outputFile != os.Stdout {
+			outputFile.Close()
+		}
+		var err error
+		outputFile, err = os.OpenFile(newFilename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			if logger != nil {
+				logger.Printf("Error opening dated output file %s: %v", newFilename, err)
+			}
+			return
+		}
 	}
 
 	webContent := ""
