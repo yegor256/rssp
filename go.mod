@@ -3,8 +3,6 @@
 
 module rssp
 
-go 1.24
+go 1.25.0
 
-toolchain go1.24.4
-
-require golang.org/x/text v0.26.0
+require golang.org/x/text v0.36.0
